@@ -59,8 +59,7 @@ class MobileDataCheckWorker(context: Context, workerParams: WorkerParameters) : 
                     prefs.incrementSendLocationCount() // 10okt2026
                     Timber.i("sendLocation completed successfully")
                     val recipientEmail = prefs.getEmailAddress()
-                    if (imageUrl.isNotEmpty()) {
-                        Timber.i("Sending email with image: $imageUrl")
+                    if (recipientEmail.isNotBlank() && imageUrl.isNotEmpty()) {
                         val fileName = imageUrl.replace("http://almica.bplaced.net/uploads/", "")
                         Timber.i("Sending email with image: $fileName and location: $lat, $lon to $recipientEmail")
                         sendEmail(fileName, recipientEmail, lat, lon)
