@@ -1,0 +1,63 @@
+<resources>
+    <string name="app_name">ShareLoc</string>
+    <string name="app_title">ShareLoc</string>
+    <string name="sms_phone_number">+4915776049418</string>
+    <string name="actions">Actions</string>
+    <string name="status">Network state</string>
+    <string name="worker_running">Background job running… (%1$d min)</string>
+    <string name="worker_start">Start background job (%1$d min)</string>
+    <string name="worker_stop">Stop background job</string>
+    <string name="get_locations">Fetch locations</string>
+    <string name="delete_old_records_label">Delete old location records (days):</string>
+
+    <string name="settings">Settings</string>
+    <string name="background_location_title">Background Location</string>
+    <string name="background_location_rationale">This app requires background location access to regularly update your location even when the app is inactive.</string>
+    <string name="allow">Allow</string>
+    <string name="cancel">Cancel</string>
+    <string name="sms_sent_to">SMS sent to %1$s</string>
+    <string name="sms_error">Error sending SMS</string>
+    <string name="sms_permission_denied">SMS permission denied</string>
+    <string name="sms_phone_label">Phone number</string>
+    <string name="email_label">Recipient email address</string>
+    <string name="sms_interval_label">Interval (minutes)</string>
+    <string name="save">Save</string>
+    <string name="send_sms_title">Send SMS</string>
+    <string name="sms_recipient_label">Recipient phone number</string>
+    <string name="sms_message_label">Message</string>
+    <string name="send">Send</string>
+    <string name="locations_title">Locations</string>
+    <string name="device_filter_label">Device filter</string>
+    <string name="close">Close</string>
+    <string name="uc_close" translatable="false">\u2716</string>
+    <string name="cleanup">Clean up</string>
+    <string name="cleanup_old_records">Clean up old records</string>
+    <string name="locations_sent_count">Locations sent: %1$d</string>
+    <string name="send_location_now">Send location now</string>
+    <string name="send_sms_now">Send SMS now</string>
+    <string name="current_status_label">Last status check: %1$s</string>
+    <string name="status_active">Mobile Data ACTIVE</string>
+    <string name="status_inactive">Mobile Data INACTIVE</string>
+    <string name="check_status_now">Check status now</string>
+    <string name="enable_notifications_label">Enable notifications</string>
+    <string name="fetch_limit_all">All</string>
+    <string name="device_label">📱 Device: %1$s</string>
+    <string name="open_in_map">🗺️ Google Maps</string>
+    <string name="store_in_gallery">▶️ Gallery</string>
+    <string name="image_saved">Image saved</string>
+    <string name="image_not_saved">Image could not be saved</string>
+    <string name="take_picture">Take picture</string>
+    <string name="take_picture_and_upload">Take picture and upload</string>
+    <string name="sms_template_label">Select template…</string>
+    <string name="camera_loading">Loading camera …</string>
+    <string-array name="sms_messages">
+        <item>👌 OK</item>
+        <item>🚗 I\'m leaving now</item>
+        <item>🆘 Please pick me up</item>
+        <item>📷 Took a photo</item>
+        <item>🏠 I\'m heading home</item>
+        <item>🏁 I\'ve arrived</item>
+        <item>❓ Where are you?</item>
+        <item>😊 Everything\'s fine</item>
+    </string-array>
+</resources>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Winding route line -->
+    <path
+        android:pathData="M20,80 C30,70 40,90 54,54 C68,18 78,38 88,28"
+        android:strokeColor="@color/map_path_red"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Hauptpfad: Der elegante Map-Pin (Zentriert bei 54,54) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,25 C41.3,25 31,35.3 31,48 C31,65.2 54,83 54,83 C54,83 77,65.2 77,48 C77,35.3 66.7,25 54,25 Z"/>
+
+    <!-- Innerer Ausschnitt: Das Sharing-Symbol (Knotenpunkte ausgstanzt in Weiß) -->
+    <!-- Oberer Punkt -->
+    <path
+        android:fillColor="#007AFF"
+        android:pathData="M54,37 A 3.5 3.5 0 1 1 54,44 A 3.5 3.5 0 1 1 54,37 Z"/>
+    <!-- Linker unterer Punkt -->
+    <path
+        android:fillColor="#007AFF"
+        android:pathData="M46,51 A 3.5 3.5 0 1 1 46,58 A 3.5 3.5 0 1 1 46,51 Z"/>
+    <!-- Rechter unterer Punkt -->
+    <path
+        android:fillColor="#007AFF"
+        android:pathData="M62,51 A 3.5 3.5 0 1 1 62,58 A 3.5 3.5 0 1 1 62,51 Z"/>
+
+    <!-- Verbindungslinien des Sharing-Knotens -->
+    <path
+        android:strokeColor="#007AFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M54,40.5 L46,54.5 M54,40.5 L62,54.5"/>
+</vector>
