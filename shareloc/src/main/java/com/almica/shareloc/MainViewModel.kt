@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
+import android.location.Location
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -15,9 +16,13 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -48,6 +53,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _locationList = MutableStateFlow<List<LocationItem>>(emptyList())
     val locationList: StateFlow<List<LocationItem>> = _locationList.asStateFlow()
+
+    private val _locationState = MutableStateFlow<Location?>(null)
+    val locationState: StateFlow<Location?> = _locationState.asStateFlow()
 
     private val _notificationsEnabled = MutableStateFlow(prefs.getNetworkStateNotificationsEnabled())
     val notificationsEnabled: StateFlow<Boolean> = _notificationsEnabled.asStateFlow()
@@ -357,6 +365,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    @androidx.annotation.RequiresPermission(anyOf = [android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION])
+    fun fetchCurrentLocation(context: Context) {
+        viewModelScope.launch {
+            try {
+                val client = LocationServices.getFusedLocationProviderClient(context)
+                val request = CurrentLocationRequest.Builder()
+                    .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                    .build()
+                _locationState.value = client.getCurrentLocation(request, null).await()
+            } catch (e: SecurityException) {
+                Timber.e(e, "Location permission missing")
+                _locationState.value = null
+            } catch (e: Exception) {
+                Timber.e(e, "Error fetching location")
+                _locationState.value = null
+            }
+        }
+    }
     override fun onCleared() {
         super.onCleared()
         networkMonitor.unregister()

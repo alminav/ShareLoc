@@ -1,8 +1,10 @@
 package com.almica.shareloc
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.location.Location
 import android.media.MediaActionSound
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -50,6 +52,9 @@ import androidx.core.graphics.scale
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,7 +65,9 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.runtime.collectAsState
 
+@SuppressLint("MissingPermission")
 @Composable
 fun GeoCameraScreen(
     onDismiss: (msg: Pair<String, String?>?, link: String?) -> Unit,
@@ -70,9 +77,18 @@ fun GeoCameraScreen(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var activeImageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var isSaving by remember { mutableStateOf(false) }
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    val imageLocation = remember { mutableStateOf<Location?>(null) }
+// Standortabfrage vor der Aufnahme
+    viewModel.fetchCurrentLocation(context)
+    LaunchedEffect(viewModel.locationState.collectAsState().value) {
+        Timber.i("Location: ${viewModel.locationState.value}")
+        imageLocation.value = viewModel.locationState.value
+    }
 
     val isInspection = LocalInspectionMode.current
     val actionSound = remember(isInspection) { if (isInspection) null else MediaActionSound() }
+
     DisposableEffect(isInspection) {
         onDispose {
             actionSound?.release()
@@ -128,7 +144,7 @@ fun GeoCameraScreen(
                 Button(
                     onClick = {
                         isSaving = true
-                        takePicture(
+                        takePicture(imageLocation.value,
                             actionSound = actionSound,
                             context = context,
                             lifecycle = lifecycle,
@@ -141,7 +157,7 @@ fun GeoCameraScreen(
                         )
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Red,
+                        containerColor = if (imageLocation.value != null) Color.Red else Color.LightGray,
                         contentColor = Color.White
                     ),
                     border = BorderStroke(2.dp, Color.White)
@@ -154,6 +170,7 @@ fun GeoCameraScreen(
 }
 
 private fun takePicture(
+    location: Location?,
     actionSound: Any?,
     context: Context,
     lifecycle: androidx.lifecycle.Lifecycle,
@@ -170,10 +187,14 @@ private fun takePicture(
     val deviceName = getDeviceName()
     val photoDate = getReadableDate(System.currentTimeMillis())
     val photoFile = File(context.cacheDir, "${deviceName}_${photoDate}.jpg")
-    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-
+    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile)
+    location.let {
+        Timber.i("Location: ${it?.latitude}, ${it?.longitude}")
+        val metadata = ImageCapture.Metadata().apply { this.location = it }
+        outputOptions.setMetadata(metadata)
+    }
     activeImageCapture.takePicture(
-        outputOptions,
+        outputOptions.build(),
         ContextCompat.getMainExecutor(context),
         object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
