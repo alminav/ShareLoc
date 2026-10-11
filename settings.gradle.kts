@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "MobileDataChecker"
-include(":app")
+rootProject.name = "ShareLoc"
+include(":shareloc")

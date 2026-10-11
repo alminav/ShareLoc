@@ -2,7 +2,7 @@
 
 ## 📋 Prerequisites
 
-Before building **MobileDataChecker**, ensure you have:
+Before building **ShareLoc**, ensure you have:
 * **Android Studio**: Ladybug (2024.2.1) or newer.
 * **JDK**: Version 17.
 * **Target Android SDK**: API 35/37 (Minimum API level 24 - Android 7.0).
@@ -14,8 +14,8 @@ Before building **MobileDataChecker**, ensure you have:
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/alminav/MobileDataChecker.git
-   cd MobileDataChecker
+   git clone https://github.com/alminav/ShareLoc.git
+   cd ShareLoc
    ```
 
 2. **Open in Android Studio**:

@@ -2,7 +2,7 @@
 
 ## 📐 Architecture Overview
 
-**MobileDataChecker** follows standard modern Android architecture principles (**MVVM** – Model-View-ViewModel) paired with declarative UI using **Jetpack Compose**.
+**ShareLoc** follows standard modern Android architecture principles (**MVVM** – Model-View-ViewModel) paired with declarative UI using **Jetpack Compose**.
 
 ```
 +-------------------------------------------------------------+

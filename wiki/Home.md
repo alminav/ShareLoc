@@ -1,6 +1,6 @@
-# Welcome to the MobileDataChecker Wiki
+# Welcome to the ShareLoc Wiki
 
-**MobileDataChecker** is an Android application designed to monitor cellular data connectivity, track device location and battery temperature telemetry in the background, send SMS notifications, and log status updates to a remote PHP REST API (`bplaced.net`).
+**ShareLoc** is an Android application designed to monitor cellular data connectivity, track device location and battery temperature telemetry in the background, send SMS notifications, and log status updates to a remote PHP REST API (`bplaced.net`).
 
 ---
 

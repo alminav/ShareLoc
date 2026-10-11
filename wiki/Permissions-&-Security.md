@@ -2,7 +2,7 @@
 
 ## 🔒 Permissions Used
 
-**MobileDataChecker** requires specific system permissions to monitor telemetry and send alerts:
+**ShareLoc** requires specific system permissions to monitor telemetry and send alerts:
 
 | Permission | Purpose |
 | :--- | :--- |

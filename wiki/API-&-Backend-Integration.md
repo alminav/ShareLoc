@@ -1,6 +1,6 @@
 # API & Backend Integration
 
-**MobileDataChecker** communicates with a remote PHP REST API hosted on `bplaced.net` via **Retrofit 2** and **Gson**.
+**ShareLoc** communicates with a remote PHP REST API hosted on `bplaced.net` via **Retrofit 2** and **Gson**.
 
 ---
 
