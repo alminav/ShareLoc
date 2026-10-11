@@ -1,6 +1,6 @@
-# MobileDataChecker
+# ShareLoc
 
-**MobileDataChecker** is an Android application designed to monitor cellular data connectivity, track device location telemetry in the background, send SMS notifications, and log status updates to a remote API.
+**ShareLoc** is an Android application designed to monitor cellular data connectivity, track device location telemetry in the background, send SMS notifications, and log status updates to a remote API.
 
 ---
 
@@ -50,8 +50,8 @@ The app utilizes several Android system permissions:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/alminav/MobileDataChecker.git
-   cd MobileDataChecker
+   git clone https://github.com/alminav/ShareLoc.git
+   cd ShareLoc
    ```
 
 2. **Open in Android Studio**:
