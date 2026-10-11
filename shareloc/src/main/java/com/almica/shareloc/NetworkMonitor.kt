@@ -11,26 +11,26 @@ import kotlinx.coroutines.flow.StateFlow
 class NetworkMonitor(context: Context) {
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-    private val _isMobileDataActive = MutableStateFlow(false)
-    val isMobileDataActive: StateFlow<Boolean> = _isMobileDataActive
+    private val _isShareLocActive = MutableStateFlow(false)
+    val isShareLocActive: StateFlow<Boolean> = _isShareLocActive
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
             // Prüft, ob das aktive Netzwerk zellulär ist UND tatsächliche Internetkapazität besitzt
             val isCellular = networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
             val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            _isMobileDataActive.value = isCellular && hasInternet
+            _isShareLocActive.value = isCellular && hasInternet
         }
 
         override fun onLost(network: Network) {
             // Falls die Verbindung komplett verloren geht, prüfen wir den Gesamtstatus neu
-            _isMobileDataActive.value = checkCurrentStatus()
+            _isShareLocActive.value = checkCurrentStatus()
         }
     }
 
     init {
         // Initialer Check beim Start der App
-        _isMobileDataActive.value = checkCurrentStatus()
+        _isShareLocActive.value = checkCurrentStatus()
 
         // Registriert den Callback für kontinuierliche Live-Updates
         val request = NetworkRequest.Builder()

@@ -32,7 +32,7 @@ object Constants {
     const val KEY_EMAIL_ADDRESS = "email_address"
 }
 
-fun isMobileDataEnabled(context: Context): Pair<Boolean, Float> {
+fun isShareLocEnabled(context: Context): Pair<Boolean, Float> {
     val temp = getBatteryTemperature(context)
     Timber.i("Checking data status at battery temperature: $temp°C")
 
@@ -67,7 +67,7 @@ fun getBatteryTemperature(context: Context): Float {
     return celsius
 }
 
-fun sendMobileDataNotification(context: Context) {
+fun sendShareLocNotification(context: Context) {
     val channelId = Constants.NOTIFICATION_CHANNEL_ID
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 

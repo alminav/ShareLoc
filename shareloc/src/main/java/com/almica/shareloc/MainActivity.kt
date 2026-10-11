@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Start
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TabletAndroid
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -97,7 +96,7 @@ class MainActivity : ComponentActivity() {
 fun MainScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val isMobileDataLive by viewModel.isMobileDataActive.collectAsStateWithLifecycle(initialValue = false)
+    val isShareLocActive by viewModel.isShareLocActive.collectAsStateWithLifecycle(initialValue = false)
     val isWorkerRunning by viewModel.isWorkerRunning.collectAsStateWithLifecycle(initialValue = false)
     val workerLastRunTime by viewModel.workerLastRunTime.collectAsStateWithLifecycle(initialValue = 0L)
     val sendLocationCount by viewModel.sendLocationCount.collectAsStateWithLifecycle(initialValue = 0)
@@ -179,14 +178,14 @@ fun MainScreen(viewModel: MainViewModel) {
 
     // Update timestamp when status changes or worker runs
 
-    LaunchedEffect(isMobileDataLive, isWorkerRunning, workerLastRunTime) {
+    LaunchedEffect(isShareLocActive, isWorkerRunning, workerLastRunTime) {
         lastStatusChangeTime = System.currentTimeMillis()
     }
 
     // Auto-notification when live status becomes active
-    LaunchedEffect(isMobileDataLive) {
-        if (notificationsEnabled && isMobileDataLive && hasRequiredPermissions) {
-            sendMobileDataNotification(context)
+    LaunchedEffect(isShareLocActive) {
+        if (notificationsEnabled && isShareLocActive && hasRequiredPermissions) {
+            sendShareLocNotification(context)
         }
     }
 
@@ -232,7 +231,7 @@ fun MainScreen(viewModel: MainViewModel) {
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             MainScreenContent(
-                isMobileDataLive = isMobileDataLive,
+                isShareLocActive = isShareLocActive,
                 isWorkerRunning = isWorkerRunning,
                 workerInterval = viewModel.getIntervalMinutes(),
                 sendLocationCount = sendLocationCount,
@@ -240,8 +239,8 @@ fun MainScreen(viewModel: MainViewModel) {
                 lastStatusChangeTime = lastStatusChangeTime,
                 onNotificationsChanged = { viewModel.setNotificationsEnabled(it) },
                 onCheckStatus = {
-                    if (isMobileDataLive && hasRequiredPermissions) {
-                        sendMobileDataNotification(context)
+                    if (isShareLocActive && hasRequiredPermissions) {
+                        sendShareLocNotification(context)
                     }
                     lastStatusChangeTime = System.currentTimeMillis()
 //                    val intent = Intent(context, BplacedActivity::class.java)
@@ -1062,7 +1061,7 @@ fun WorkerControlCard(
 
 @Composable
 fun StatusCard(
-    isMobileDataLive: Boolean,
+    isShareLocActive: Boolean,
     lastStatusChangeTime: Long,
     notificationsEnabled: Boolean,
     statusBoxColor: Color,
@@ -1096,7 +1095,7 @@ fun StatusCard(
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = if (isMobileDataLive) stringResource(R.string.status_active) else stringResource(R.string.status_inactive),
+                text = if (isShareLocActive) stringResource(R.string.status_active) else stringResource(R.string.status_inactive),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Black
             )
@@ -1136,7 +1135,7 @@ fun StatusCard(
 
 @Composable
 fun MainScreenContent(
-    isMobileDataLive: Boolean,
+    isShareLocActive: Boolean,
     isWorkerRunning: Boolean,
     workerInterval: Long,
     sendLocationCount: Int,
@@ -1155,12 +1154,12 @@ fun MainScreenContent(
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val deviceName = getDeviceName()
     val statusBoxColor by animateColorAsState(
-        targetValue = if (isMobileDataLive) MaterialTheme.colorScheme.errorContainer 
+        targetValue = if (isShareLocActive) MaterialTheme.colorScheme.errorContainer
                       else MaterialTheme.colorScheme.primaryContainer,
         label = "StatusColor"
     )
     
-    val contentColor = if (isMobileDataLive) MaterialTheme.colorScheme.onErrorContainer 
+    val contentColor = if (isShareLocActive) MaterialTheme.colorScheme.onErrorContainer
                        else MaterialTheme.colorScheme.onPrimaryContainer
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val scope = rememberCoroutineScope()
@@ -1221,7 +1220,7 @@ fun MainScreenContent(
                 }
                 1 -> {
                     StatusCard(
-                        isMobileDataLive = isMobileDataLive,
+                        isShareLocActive = isShareLocActive,
                         lastStatusChangeTime = lastStatusChangeTime,
                         notificationsEnabled = notificationsEnabled,
                         statusBoxColor = statusBoxColor,
@@ -1250,7 +1249,7 @@ fun MainScreenActivePreview() {
             color = MaterialTheme.colorScheme.background
         ) {
             MainScreenContent(
-                isMobileDataLive = true,
+                isShareLocActive = true,
                 isWorkerRunning = false,
                 workerInterval = 15L,
                 sendLocationCount = 3,
@@ -1279,7 +1278,7 @@ fun MainScreenInactivePreview() {
             color = MaterialTheme.colorScheme.background
         ) {
             MainScreenContent(
-                isMobileDataLive = false,
+                isShareLocActive = false,
                 isWorkerRunning = true,
                 workerInterval = 15L,
                 sendLocationCount = 5,

@@ -33,7 +33,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val workManager = WorkManager.getInstance(application)
     private val prefs = PreferenceManager(application)
     private var imageCapture: ImageCapture? = null
-    val isMobileDataActive: StateFlow<Boolean> = networkMonitor.isMobileDataActive
+    val isShareLocActive: StateFlow<Boolean> = networkMonitor.isShareLocActive
     // Track work status more robustly by checking for any active work with the tag
     val isWorkerRunning: StateFlow<Boolean> = workManager
         .getWorkInfosByTagFlow(Constants.WORK_TAG)
@@ -81,7 +81,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startWorker() {
         val interval = prefs.getIntervalMinutes()
-        val workRequest = PeriodicWorkRequestBuilder<MobileDataCheckWorker>(
+        val workRequest = PeriodicWorkRequestBuilder<ShareLocWorker>(
             interval, TimeUnit.MINUTES
         )
             .addTag(Constants.WORK_TAG)
@@ -118,7 +118,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getEmailAddress() = prefs.getEmailAddress()
 
     fun testWorkerImmediately() {
-        val testRequest = OneTimeWorkRequestBuilder<MobileDataCheckWorker>()
+        val testRequest = OneTimeWorkRequestBuilder<ShareLocWorker>()
             .addTag(Constants.WORK_TAG)
             .addTag("test_worker")
             .build()

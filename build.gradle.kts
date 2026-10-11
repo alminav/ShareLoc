@@ -7,6 +7,6 @@ plugins {
 
 configure<org.gradle.plugins.ide.idea.model.IdeaModel> {
     module {
-        excludeDirs.addAll(listOf(file(".idea"), file(".kotlin"), file(".artifacts"), file(path = "backup"), file(path = "wiki")))
+        excludeDirs.addAll(listOf(file(".idea"), file(".kotlin"), file(".artifacts"), file(path = "backup"), file(path = "wiki"), file(path = "bplaced_php")))
     }
 }

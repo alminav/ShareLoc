@@ -79,7 +79,7 @@ class SmsReceiver : BroadcastReceiver() {
             return true
         }
 
-        // Regel 2: Inhalt enthält relevante Schlüsselwörter für MobileDataChecker
+        // Regel 2: Inhalt enthält relevante Schlüsselwörter für ShareLoc
         val relevantKeywords = listOf("data", "daten", "status", "alert", "mobile", "warnung", "check")
         val containsKeyword = relevantKeywords.any { keyword ->
             body.contains(keyword, ignoreCase = true)

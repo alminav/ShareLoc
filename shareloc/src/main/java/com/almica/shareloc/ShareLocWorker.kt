@@ -23,12 +23,12 @@ import timber.log.Timber
 import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.seconds
 
-class MobileDataCheckWorker(context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
+class ShareLocWorker(context: Context, workerParams: WorkerParameters) : CoroutineWorker(context, workerParams) {
     override suspend fun doWork(): Result {
-        val (isEnabled, temp) = isMobileDataEnabled(applicationContext)
+        val (isEnabled, temp) = isShareLocEnabled(applicationContext)
         val isNetworkStateNotificationEnabled = PreferenceManager(applicationContext).getNetworkStateNotificationsEnabled()
         if (isEnabled && isNetworkStateNotificationEnabled) {
-            sendMobileDataNotification(applicationContext)
+            sendShareLocNotification(applicationContext)
         }
         Timber.i("Mobile Data Check Worker executed, temperature: $temp°C")
 

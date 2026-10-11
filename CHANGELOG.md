@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the MobileDataChecker project will be documented in this file.
+All notable changes to the ShareLoc project will be documented in this file.
 
 ## [1.0.2] - 2026-10-06
 
@@ -31,7 +31,7 @@ All notable changes to the MobileDataChecker project will be documented in this 
   - Added UI switch toggle in `MainActivity` to enable/disable notifications.
   - Added `enable_notifications_label` string resources in English and German (`strings.xml` and `values-de/strings.xml`).
 - **Worker Notification Check**:
-  - Updated `MobileDataCheckWorker` to respect the notification preference (`isNotificationEnabled`) when mobile data is active.
+  - Updated `ShareLocWorker` to respect the notification preference (`isNotificationEnabled`) when mobile data is active.
 
 ### Fixed
 - Fixed compilation error: `Unresolved reference 'notificationsEnabled'` in `MainActivity.kt`.
