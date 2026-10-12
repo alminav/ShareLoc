@@ -102,6 +102,23 @@
         }
         .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .alert-danger { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+		.maps-button {
+			display: inline-block;
+			background-color: #1a73e8; /* Typisches Google-Blau */
+			color: white;
+			padding: 10px 20px;
+			text-decoration: none;
+			font-family: Arial, sans-serif;
+			font-size: 14px;
+			font-weight: bold;
+			border-radius: 4px;
+			box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+			transition: background-color 0.2s;
+		}
+
+		.maps-button:hover {
+			background-color: #1557b0; /* Dunkleres Blau beim Drüberfahren */
+		}
     </style>
 </head>
 <body>
@@ -196,7 +213,20 @@ echo $msg;
             $fileTime = filemtime($image);
             $formattedDate = date("d.m.Y H:i", $fileTime);
             $filename = basename($image);
+			// GPS aus Bild extrahieren
+			$coordinates = getGPSFromImage($image);
 
+			if ($coordinates) {
+				//echo "Breitengrad (Latitude): " . $coordinates['lat'] . "<br>";
+				//echo "Längengrad (Longitude): " . $coordinates['lng'] . "<br>";
+				
+				// KORREKTUR: Zuweisung korrigiert (Es heißt 'lng', nicht 'lon')
+				$latitude = $coordinates['lat'];
+				$longitude = $coordinates['lng']; 
+				php_console_log("GPS: " . $latitude . $longitude);
+			} else {
+				php_console_log($image . " Keine GPS-Daten im Bild vorhanden. Nutze URL-Parameter falls vorhanden.");
+			}
             $deleteUrl = "?sort=" . $sortOrder . "&delete=" . urlencode($image);
 			// Die URL für das Sende-Skript mit dem Parameter "datei" aufbauen
 			//$latitude=52.1; 
@@ -218,6 +248,24 @@ echo $msg;
             echo '          <button class="action-btn delete-btn" title="Bild löschen" onclick="confirmDelete(\'' . jsone(htmlspecialchars($deleteUrl)) . '\')">🗑️</button>';
             echo '      </div>';
             echo '  </div>';
+			if ($coordinates) {
+				// Sicherstellen, dass die Werte für die URL korrekt codiert sind
+				$url_latitude = urlencode($latitude);
+				$url_longitude = urlencode($longitude);
+
+				// Google Maps URL generieren (funktioniert auf Desktop und in der mobilen App)
+				//$maps_url = "http://google.com{$url_latitude},{$url_longitude}";
+				$maps_url = "https://maps.google.com/?q=${url_latitude},${url_longitude}";
+
+				// Das gesamte Layout in einem einzigen echo-Befehl ausgeben
+				echo '<div class="maps-button">
+					<a href="' . $maps_url . '" target="_blank" rel="noopener noreferrer" class="maps-button">
+						📍 Auf Google Maps anzeigen
+					</a>
+				</div>';
+				//echo "<div>" . "📍 " . $latitude . " " . $longitude . "</div>";
+			}
+
             echo '</div>';
         }
     } else {
@@ -234,7 +282,62 @@ echo $msg;
 		// Gibt den JavaScript-Code direkt im Browser aus
 		echo "<script>console.log('PHP-Log: ' + " . $json_daten . ");</script>";
 	}
-    ?>
+	/**
+	 * Reine mathematische Hilfsfunktion zur DMS-Umrechnung.
+	 * Getrennt deklariert, um Parser-Abbrüche auf dem Server zu verhindern.
+	 */
+	function convertExifToDecimal($coordinateArray) {
+		if (!is_array($coordinateArray) || count($coordinateArray) < 3) {
+			return 0.0;
+		}
+		
+		$parts = array_map(function($part) {
+			$division = explode('/', $part);
+			if (count($division) === 2 && (float)$division[1] != 0) {
+				return (float)$division[0] / (float)$division[1];
+			}
+			return (float)$part;
+		}, $coordinateArray);
+
+		// Formel: Grad + (Minuten / 60) + (Sekunden / 3600)
+		return (float)$parts[0] + ((float)$parts[1] / 60) + ((float)$parts[2] / 3600);
+	}
+
+	/**
+	 * Extrahiert die GPS-Koordinaten aus einem JPG-Bild.
+	 * Prüft vorab, ob EXIF auf dem Server aktiviert ist.
+	 */
+	function getGPSFromImage($imagePath) {
+		// Sicherheitscheck: Unterstützt der Webspace überhaupt EXIF?
+		if (!function_exists('exif_read_data')) {
+			php_console_log("WARNUNG: exif_read_data ist auf diesem Server deaktiviert!");
+			return false;
+		}
+
+		$exif = @exif_read_data($imagePath, 'GPS');
+		
+		if (!$exif || !isset($exif['GPSLatitude'], $exif['GPSLongitude'], $exif['GPSLatitudeRef'], $exif['GPSLongitudeRef'])) {
+			return false; // Keine GPS-Daten im Bild
+		}
+
+		// Berechnung über die externe Hilfsfunktion
+		$lat = convertExifToDecimal($exif['GPSLatitude']);
+		$lng = convertExifToDecimal($exif['GPSLongitude']);
+
+		if (strtoupper($exif['GPSLatitudeRef']) === 'S') {
+			$lat = -$lat;
+		}
+		if (strtoupper($exif['GPSLongitudeRef']) === 'W') {
+			$lng = -$lng;
+		}
+
+		return [
+			'lat' => round($lat, 6),
+			'lng' => round($lng, 6)
+		];
+	}
+
+?>
 </div>
 
 <script>
