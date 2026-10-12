@@ -373,7 +373,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val request = CurrentLocationRequest.Builder()
                     .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
                     .build()
-                _locationState.value = client.getCurrentLocation(request, null).await()
+                var loc = client.getCurrentLocation(request, null).await()
+                if (loc == null) {
+                    loc = client.lastLocation.await()
+                }
+                _locationState.value = loc
+                Timber.i("Fetched location: $loc")
             } catch (e: SecurityException) {
                 Timber.e(e, "Location permission missing")
                 _locationState.value = null

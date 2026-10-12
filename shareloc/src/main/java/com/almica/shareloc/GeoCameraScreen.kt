@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,12 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.scale
+import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.android.gms.location.CurrentLocationRequest
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -65,25 +64,24 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.compose.runtime.collectAsState
 
 @SuppressLint("MissingPermission")
 @Composable
 fun GeoCameraScreen(
-    onDismiss: (msg: Pair<String, String?>?, link: String?) -> Unit,
+    onDismiss: (msg: Pair<String, String?>?, link: String?, location: Location?) -> Unit,
     viewModel: MainViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var activeImageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var isSaving by remember { mutableStateOf(false) }
-    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
-    val imageLocation = remember { mutableStateOf<Location?>(null) }
-// Standortabfrage vor der Aufnahme
-    viewModel.fetchCurrentLocation(context)
-    LaunchedEffect(viewModel.locationState.collectAsState().value) {
-        Timber.i("Location: ${viewModel.locationState.value}")
-        imageLocation.value = viewModel.locationState.value
+
+    // Collect location directly from ViewModel
+    val imageLocation by viewModel.locationState.collectAsState()
+
+    // Fetch location once when the screen is launched
+    LaunchedEffect(Unit) {
+        viewModel.fetchCurrentLocation(context)
     }
 
     val isInspection = LocalInspectionMode.current
@@ -96,7 +94,7 @@ fun GeoCameraScreen(
     }
 
     BackHandler {
-        onDismiss(null, null)
+        onDismiss(null, null, null)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -110,7 +108,7 @@ fun GeoCameraScreen(
 
         // Close Button
         IconButton(
-            onClick = { onDismiss(null, null) },
+            onClick = { onDismiss(null, null, null) },
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .statusBarsPadding()
@@ -144,7 +142,7 @@ fun GeoCameraScreen(
                 Button(
                     onClick = {
                         isSaving = true
-                        takePicture(imageLocation.value,
+                        takePicture(imageLocation,
                             actionSound = actionSound,
                             context = context,
                             lifecycle = lifecycle,
@@ -152,12 +150,12 @@ fun GeoCameraScreen(
                             activeImageCapture = activeImageCapture,
                             onDismiss = { msg, link ->
                                 isSaving = false
-                                onDismiss(msg, link)
+                                onDismiss(msg, link, imageLocation)
                             }
                         )
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (imageLocation.value != null) Color.Red else Color.LightGray,
+                        containerColor = if (imageLocation != null) Color.Red else Color.LightGray,
                         contentColor = Color.White
                     ),
                     border = BorderStroke(2.dp, Color.White)
@@ -189,7 +187,9 @@ private fun takePicture(
     val photoFile = File(context.cacheDir, "${deviceName}_${photoDate}.jpg")
     val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile)
     location.let {
-        Timber.i("Location: ${it?.latitude}, ${it?.longitude}")
+        Timber.i("takePicture Location: ${it?.latitude}, ${it?.longitude}")
+        // exif per metadata works not with Doogee Blade 10, but with emulator
+        // therefor exif is written explicitly with writeExifLocation
         val metadata = ImageCapture.Metadata().apply { this.location = it }
         outputOptions.setMetadata(metadata)
     }
@@ -199,7 +199,7 @@ private fun takePicture(
         object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                 lifecycle.coroutineScope.launch {
-                    val compressedFile = compressImageFile(photoFile, photoFile)
+                    val compressedFile = compressImageFile(photoFile, photoFile, location)
                     Timber.i("Compressed file size: ${compressedFile.length()}")
 
                     viewModel.uploadImageToBplaced(compressedFile) { response ->
@@ -225,6 +225,7 @@ private fun takePicture(
 suspend fun compressImageFile(
     inputFile: File,
     outputFile: File,
+    location: Location?,
     targetSizeBytes: Long = 500 * 1024 // 500 KB
 ): File = withContext(Dispatchers.IO) {
     Timber.i("Compressing file: ${inputFile.name}")
@@ -232,6 +233,7 @@ suspend fun compressImageFile(
         if (inputFile != outputFile) {
             inputFile.copyTo(outputFile, overwrite = true)
         }
+        writeExifLocation(outputFile, location)
         return@withContext outputFile
     }
 
@@ -286,6 +288,7 @@ suspend fun compressImageFile(
         FileOutputStream(outputFile).use { out ->
             stream.writeTo(out)
         }
+        writeExifLocation(outputFile, location)
     } finally {
         bitmap.recycle()
     }
@@ -293,13 +296,28 @@ suspend fun compressImageFile(
     return@withContext outputFile
 }
 
+private fun writeExifLocation(file: File, location: Location?) {
+    if (location == null) return
+    try {
+        val exifInterface = ExifInterface(file.absolutePath)
+        exifInterface.setLatLong(location.latitude, location.longitude)
+        if (location.hasAltitude()) {
+            exifInterface.setAltitude(location.altitude)
+        }
+        exifInterface.saveAttributes()
+        Timber.i("EXIF location saved to ${file.name}: ${location.latitude}, ${location.longitude}")
+    } catch (e: Exception) {
+        Timber.e(e, "Error saving EXIF location to ${file.name}")
+    }
+}
+
 private fun getExifRotation(file: File): Int {
     return try {
-        val exif = androidx.exifinterface.media.ExifInterface(file.absolutePath)
-        when (exif.getAttributeInt(androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION, androidx.exifinterface.media.ExifInterface.ORIENTATION_UNDEFINED)) {
-            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90 -> 90
-            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180
-            androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270
+        val exif = ExifInterface(file.absolutePath)
+        when (exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED)) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270
             else -> 0
         }
     } catch (_: Exception) {

@@ -299,7 +299,7 @@ fun MainScreen(viewModel: MainViewModel) {
 
     if (showGeoCamera) {
         GeoCameraScreen(
-            onDismiss = { msgPair, link ->
+            onDismiss = { msgPair, link, location ->
                 Timber.i("GeoCamera dismissed link: $link")
                 Timber.i("GeoCamera dismissed fileName: ${msgPair?.first}")
                 scope.launch {
@@ -308,9 +308,20 @@ fun MainScreen(viewModel: MainViewModel) {
                 Timber.i("GeoCamera dismissed photo link: $link")
                 val prefs = PreferenceManager(context)
                 link?.let {
-                    prefs.setImageUrl(it)
-                    viewModel.testWorkerImmediately()
-                    lastStatusChangeTime = System.currentTimeMillis()
+                    if (isWorkerRunning) {
+                        prefs.setImageUrl(it)
+                        viewModel.testWorkerImmediately()
+                        lastStatusChangeTime = System.currentTimeMillis()
+                    } else {
+                        val recipientEmail = prefs.getEmailAddress()
+                        if (location != null && recipientEmail.isNotBlank() && link.isNotEmpty()) {
+                            val fileName = link.replace("http://almica.bplaced.net/uploads/", "")
+                            Timber.i("Sending email with image: $fileName and location: ${location.latitude}, ${location.longitude} to $recipientEmail")
+                            scope.launch {
+                                sendEmail(fileName, recipientEmail, location.latitude, location.longitude)
+                            }
+                        }
+                    }
                 }
                 showGeoCamera = false
             }
@@ -970,7 +981,7 @@ fun WorkerControlCard(
             // Send Location now
             OutlinedButton(
                 onClick = onTakePicture,
-                enabled = isWorkerRunning,
+                //enabled = isWorkerRunning,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
