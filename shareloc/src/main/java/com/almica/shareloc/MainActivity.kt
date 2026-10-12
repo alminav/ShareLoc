@@ -1,6 +1,8 @@
 package com.almica.shareloc
 
 import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.content.Intent
@@ -62,6 +64,7 @@ import kotlinx.coroutines.withContext
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Language
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -70,6 +73,23 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringArrayResource
+
+private fun launchMapIntent(context: Context, latitude: Double, longitude: Double) {
+    val gmmIntentUri = "geo:$latitude,$longitude?q=$latitude,$longitude".toUri()
+    val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri).apply {
+        setPackage("com.google.android.apps.maps")
+    }
+    try {
+        context.startActivity(mapIntent)
+    } catch (e: ActivityNotFoundException) {
+        mapIntent.setPackage(null)
+        try {
+            context.startActivity(mapIntent)
+        } catch (e2: ActivityNotFoundException) {
+            Toast.makeText(context, "No map application found", Toast.LENGTH_SHORT).show()
+        }
+    }
+}
 
 class MainActivity : ComponentActivity() {
     @RequiresApi(Build.VERSION_CODES.Q)
@@ -200,7 +220,7 @@ fun MainScreen(viewModel: MainViewModel) {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_title)) },
                 actions = {
-                    IconButton(onClick = {
+/*                    IconButton(onClick = {
                         viewModel.executeFetchLocationsCount(99999) { msg ->
                             Timber.i("Fetch locations count: $msg")
                         }
@@ -210,20 +230,20 @@ fun MainScreen(viewModel: MainViewModel) {
                             imageVector = Icons.Default.PhotoCamera,
                             contentDescription = "Foto aufnehmen und hochladen"
                         )
-                    }
+                    }*/
                     IconButton(onClick = { showSettingsDialog = true }) {
                         Icon(imageVector = Icons.Default.Settings, contentDescription = stringResource(R.string.settings))
                     }
                     IconButton(onClick = {
-                        // Bypasses permission requirements by letting the user hit "Send" themselves
-                        val prefs = PreferenceManager(context)
-                        val phoneNumber = prefs.getPhoneNumber()
-                        val dialIntent = Intent(Intent.ACTION_DIAL).apply {
-                            data = "tel:${phoneNumber}".toUri()
+                        val webHomeIntentUri = "http://almica.bplaced.net/".toUri()
+                        val webIntent = Intent(Intent.ACTION_VIEW, webHomeIntentUri)
+                        try {
+                            context.startActivity(webIntent)
+                        } catch (e: ActivityNotFoundException) {
+                            Toast.makeText(context, "No browser found", Toast.LENGTH_SHORT).show()
                         }
-                        context.startActivity(dialIntent)
                     }) {
-                        Icon(imageVector = Icons.Default.Phone, contentDescription = null)
+                        Icon(imageVector = Icons.Default.Language, contentDescription = "Web Portal")
                     }
                 }
             )
@@ -727,11 +747,7 @@ fun LocationListDialog(
             confirmButton = {
                 selectedImageLocation?.let {
                     TextButton(onClick = {
-                        val gmmIntentUri =
-                            "geo:${it.latitude},${it.longitude}?q=${it.latitude},${it.longitude}".toUri()
-                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                        mapIntent.setPackage("com.google.android.apps.maps")
-                        context.startActivity(mapIntent)
+                        launchMapIntent(context, it.latitude, it.longitude)
                     }) {
                         Text(stringResource(R.string.open_in_map))
                     }
@@ -788,11 +804,7 @@ fun LocationListDialog(
                                     if (!image_location.image_url.isNullOrBlank()) {
                                         selectedImageLocation = image_location
                                     } else {
-                                        val gmmIntentUri =
-                                            "geo:${location.latitude},${location.longitude}?q=${location.latitude},${location.longitude}".toUri()
-                                        val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri)
-                                        mapIntent.setPackage("com.google.android.apps.maps")
-                                        context.startActivity(mapIntent)
+                                        launchMapIntent(context, location.latitude, location.longitude)
                                     }
                                     searchQuery = location.title.orEmpty()
                                 }
@@ -846,6 +858,82 @@ fun LocationListDialog(
 }
 
 @Composable
+fun ContactControlCard(
+    modifier: Modifier = Modifier,
+    containerColor: Color = CardDefaults.cardColors().containerColor,
+    contentColor: Color = CardDefaults.cardColors().contentColor,
+    onSendSmsNow: () -> Unit,
+    onTakePicture: () -> Unit
+) {
+    val context = LocalContext.current
+    val prefs = PreferenceManager(context)
+    val phoneNumber = remember { prefs.getPhoneNumber() }
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = containerColor,
+            contentColor = contentColor
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Send SMS now
+            OutlinedButton(
+                onClick = onSendSmsNow,
+                enabled = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.send_sms_now))
+                }
+            }
+            // Take Picture
+            OutlinedButton(
+                onClick = onTakePicture,
+                //enabled = isWorkerRunning,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.PhotoCamera, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.take_picture))
+                }
+            }
+            OutlinedButton(onClick = {
+                // Bypasses permission requirements by letting the user hit "Send" themselves
+                val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+                    data = "tel:${phoneNumber}".toUri()
+                }
+                try {
+                    context.startActivity(dialIntent)
+                } catch (e: ActivityNotFoundException) {
+                    Toast.makeText(context, "No phone application found", Toast.LENGTH_SHORT).show()
+                }
+            }, modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Phone, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.telephone_call, phoneNumber))
+                }
+            }
+        }
+    }
+}
+@Composable
 fun WorkerControlCard(
     isWorkerRunning: Boolean,
     workerInterval: Long,
@@ -857,9 +945,7 @@ fun WorkerControlCard(
     containerColor: Color = CardDefaults.cardColors().containerColor,
     contentColor: Color = CardDefaults.cardColors().contentColor,
     onSendLocationNow: () -> Unit,
-    onSendSmsNow: () -> Unit,
-    onDeleteOldRecords: (Int) -> Unit,
-    onTakePicture: () -> Unit
+    onDeleteOldRecords: (Int) -> Unit
 ) {
     var selectedLimit by remember { mutableStateOf<Int?>(5) }
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -978,20 +1064,7 @@ fun WorkerControlCard(
                     }
                 }
             }
-            // Send Location now
-            OutlinedButton(
-                onClick = onTakePicture,
-                //enabled = isWorkerRunning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.take_picture))
-                }
-            }
+
             // Send Location now
             OutlinedButton(
                 onClick = onSendLocationNow,
@@ -1004,20 +1077,6 @@ fun WorkerControlCard(
                     Icon(Icons.Default.LocationOn, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(modifier = Modifier.weight(1f), text = stringResource(R.string.send_location_now))
-                }
-            }
-            // Send SMS now
-            OutlinedButton(
-                onClick = onSendSmsNow,
-                enabled = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.send_sms_now))
                 }
             }
 
@@ -1172,7 +1231,7 @@ fun MainScreenContent(
     
     val contentColor = if (isShareLocActive) MaterialTheme.colorScheme.onErrorContainer
                        else MaterialTheme.colorScheme.onPrimaryContainer
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
     val scope = rememberCoroutineScope()
     Column(
         modifier = Modifier
@@ -1200,11 +1259,16 @@ fun MainScreenContent(
             Tab(
                 selected = pagerState.currentPage == 0,
                 onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                text = { Text(stringResource(R.string.actions)) }
+                text = { Text(stringResource(R.string.contact)) }
             )
             Tab(
                 selected = pagerState.currentPage == 1,
                 onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                text = { Text(stringResource(R.string.actions)) }
+            )
+            Tab(
+                selected = pagerState.currentPage == 1,
+                onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
                 text = { Text(stringResource(R.string.status)) }
             )
         }
@@ -1215,6 +1279,12 @@ fun MainScreenContent(
         ) { page ->
             when (page) {
                 0 -> {
+                    ContactControlCard(
+                        onSendSmsNow = onSendSmsNow,
+                        onTakePicture = onTakePicture
+                    )
+                }
+                1 -> {
                     WorkerControlCard(
                         isWorkerRunning = isWorkerRunning,
                         workerInterval = workerInterval,
@@ -1223,13 +1293,11 @@ fun MainScreenContent(
                         onStopWorker = onStopWorker,
                         onFetchLocations = onFetchLocations,
                         onSendLocationNow = onSendLocationNow,
-                        onSendSmsNow = onSendSmsNow,
                         onDeleteOldRecords = { days ->
-                        onDeleteOldRecords(days) },
-                        onTakePicture = onTakePicture
+                        onDeleteOldRecords(days) }
                     )
                 }
-                1 -> {
+                2 -> {
                     StatusCard(
                         isShareLocActive = isShareLocActive,
                         lastStatusChangeTime = lastStatusChangeTime,

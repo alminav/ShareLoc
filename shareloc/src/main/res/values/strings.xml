@@ -2,8 +2,8 @@
     <string name="app_name">ShareLoc</string>
     <string name="app_title">ShareLoc</string>
     <string name="sms_phone_number">+4915776049418</string>
-    <string name="actions">Actions</string>
-    <string name="status">Network state</string>
+    <string name="actions">🖥️ Monitor</string>
+    <string name="status">🛜 Network</string>
     <string name="worker_running">Background job running… (%1$d min)</string>
     <string name="worker_start">Start background job (%1$d min)</string>
     <string name="worker_stop">Stop background job</string>
@@ -50,6 +50,8 @@
     <string name="take_picture_and_upload">Take picture and upload</string>
     <string name="sms_template_label">Select template…</string>
     <string name="camera_loading">Loading camera …</string>
+    <string name="contact">✋ Contact</string>
+    <string name="telephone_call">Phone call (%1$s)</string>
     <string-array name="sms_messages">
         <item>👌 OK</item>
         <item>🚗 I\'m leaving now</item>
