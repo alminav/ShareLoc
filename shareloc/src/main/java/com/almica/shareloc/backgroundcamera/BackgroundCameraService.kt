@@ -61,12 +61,6 @@ class BackgroundCameraService : Service(), SensorEventListener {
             if (isRepeating) {
                 if (lightSensor != null)
                     sensorManager.registerListener(this@BackgroundCameraService, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
-                if (currentLuxValue >= LUX_THRESHOLD) {
-                    Timber.i("$TAG Helligkeit ausreichend ($currentLuxValue Lux). Foto wird aufgenommen.")
-                    capturePhotoInBackground()
-                } else {
-                    Timber.i("$TAG Foto übersprungen: Zu dunkel ($currentLuxValue Lux). Schwellenwert ist $LUX_THRESHOLD Lux.")
-                }
                 // Warte 1 Sekunde auf den Sensorwert, beende dann den Sensor und verarbeite das Foto
                 mainHandler.postDelayed({
 
