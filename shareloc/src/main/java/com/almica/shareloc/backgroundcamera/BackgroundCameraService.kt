@@ -20,10 +20,12 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.lifecycleScope
 import com.almica.shareloc.NetworkClient
 import com.almica.shareloc.PreferenceManager
 import com.almica.shareloc.UploadResponse
+import com.almica.shareloc.compressImageFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -174,7 +176,7 @@ class BackgroundCameraService : Service(), SensorEventListener {
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     Timber.i("$TAG Foto gespeichert: ${photoFile.absolutePath}")
-                    uploadImageToBplaced(photoFile) {response ->
+                    uploadImageToBplaced(photoFile) { response ->
                         Timber.i("$TAG Server Antwort: ${response.body()?.message}")
                     }
                 }
@@ -241,16 +243,17 @@ class BackgroundCameraService : Service(), SensorEventListener {
             return
         }
         Timber.i("image: ${imageFile.name}")
-        // 1. Datei in RequestBody umwandeln (MIME-Type ermitteln oder allgemein "image/*" verwenden)
-        val requestFile = imageFile.asRequestBody("image/*".toMediaTypeOrNull())
-
-        // 2. MultipartBody.Part erstellen. Der Name "image" MUSS exakt mit $_FILES['image'] im PHP übereinstimmen
-        val body = MultipartBody.Part.createFormData("image", imageFile.name, requestFile)
 
         // 3. Im Hintergrund per Coroutine hochladen
         lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val titleRequestBody = imageFile.name.toRequestBody("text/plain".toMediaTypeOrNull())
+                val compressedFile = compressImageFile(imageFile, imageFile, null)
+                Timber.i("Compressed file size: ${compressedFile.length()}")
+                // 1. Datei in RequestBody umwandeln (MIME-Type ermitteln oder allgemein "image/*" verwenden)
+                val requestFile = compressedFile.asRequestBody("image/*".toMediaTypeOrNull())
+                // 2. MultipartBody.Part erstellen. Der Name "image" MUSS exakt mit $_FILES['image'] im PHP übereinstimmen
+                val body = MultipartBody.Part.createFormData("image", compressedFile.name, requestFile)
+                val titleRequestBody = compressedFile.name.toRequestBody("text/plain".toMediaTypeOrNull())
                 Timber.i("title: $titleRequestBody")
                 val response = NetworkClient.bplacedApiService.uploadLocationWithPhoto(titleRequestBody, body)
 

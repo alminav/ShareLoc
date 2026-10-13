@@ -233,7 +233,8 @@ suspend fun compressImageFile(
         if (inputFile != outputFile) {
             inputFile.copyTo(outputFile, overwrite = true)
         }
-        writeExifLocation(outputFile, location)
+        if (location != null)
+            writeExifLocation(outputFile, location)
         return@withContext outputFile
     }
 
@@ -288,7 +289,8 @@ suspend fun compressImageFile(
         FileOutputStream(outputFile).use { out ->
             stream.writeTo(out)
         }
-        writeExifLocation(outputFile, location)
+        if (location != null)
+            writeExifLocation(outputFile, location)
     } finally {
         bitmap.recycle()
     }
