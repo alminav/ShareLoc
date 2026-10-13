@@ -30,6 +30,7 @@ object Constants {
     const val KEY_SMS_FILTER_ENABLED = "sms_filter_enabled"
     const val KEY_IMAGE_URL = "image_url"
     const val KEY_EMAIL_ADDRESS = "email_address"
+    const val KEY_BACKGROUND_CAMERA_ENABLED = "background_camera_enabled"
 }
 
 fun isShareLocEnabled(context: Context): Pair<Boolean, Float> {

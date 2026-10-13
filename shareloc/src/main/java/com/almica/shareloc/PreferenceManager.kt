@@ -81,6 +81,14 @@ class PreferenceManager(context: Context) {
     fun setSmsFilterEnabled(enabled: Boolean) {
         prefs.edit { putBoolean(Constants.KEY_SMS_FILTER_ENABLED, enabled) }
     }
+
+    fun isBackgroundCameraEnabled(): Boolean {
+        return prefs.getBoolean(Constants.KEY_BACKGROUND_CAMERA_ENABLED, false)
+    }
+
+    fun setBackgroundCameraEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(Constants.KEY_BACKGROUND_CAMERA_ENABLED, enabled) }
+    }
 }
 
 fun getDeviceName(): String {

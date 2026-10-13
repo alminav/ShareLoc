@@ -73,6 +73,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringArrayResource
+import com.almica.shareloc.backgroundcamera.BackgroundCameraService
 
 private fun launchMapIntent(context: Context, latitude: Double, longitude: Double) {
     val gmmIntentUri = "geo:$latitude,$longitude?q=$latitude,$longitude".toUri()
@@ -188,6 +189,9 @@ fun MainScreen(viewModel: MainViewModel) {
         permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
         permissions.add(Manifest.permission.INTERNET)
         permissions.add(Manifest.permission.ACCESS_NETWORK_STATE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            permissions.add(Manifest.permission.FOREGROUND_SERVICE_CAMERA)
+        }
 
         permissionLauncher.launch(permissions.toTypedArray())
 
@@ -196,7 +200,6 @@ fun MainScreen(viewModel: MainViewModel) {
         // a separate UI explanation to the user as per Google Play policies.
     }
 
-    // Update timestamp when status changes or worker runs
 
     LaunchedEffect(isShareLocActive, isWorkerRunning, workerLastRunTime) {
         lastStatusChangeTime = System.currentTimeMillis()
@@ -352,9 +355,10 @@ fun MainScreen(viewModel: MainViewModel) {
             currentPhone = viewModel.getPhoneNumber(),
             currentInterval = viewModel.getIntervalMinutes(),
             currentEmail = viewModel.getEmailAddress(),
+            currentBackgroundCameraEnabled = viewModel.isBackgroundCameraEnabled(),
             onDismiss = { showSettingsDialog = false },
-            onSave = { phone, interval, email ->
-                viewModel.updatePreferences(phone, interval, email)
+            onSave = { phone, interval, email, backgroundCameraEnabled ->
+                viewModel.updatePreferences(phone, interval, email, backgroundCameraEnabled)
                 showSettingsDialog = false
             }
         )
@@ -458,12 +462,14 @@ fun SettingsDialog(
     currentPhone: String,
     currentInterval: Long,
     currentEmail: String,
+    currentBackgroundCameraEnabled: Boolean,
     onDismiss: () -> Unit,
-    onSave: (phone: String, interval: Long, email: String) -> Unit
+    onSave: (phone: String, interval: Long, email: String, backgroundCameraEnabled: Boolean) -> Unit
 ) {
     var phone by remember { mutableStateOf(currentPhone) }
     var intervalStr by remember { mutableStateOf(currentInterval.toString()) }
     var email by remember { mutableStateOf(currentEmail) }
+    var backgroundCameraEnabled by remember { mutableStateOf(currentBackgroundCameraEnabled) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -495,13 +501,31 @@ fun SettingsDialog(
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.enable_background_camera_label),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = backgroundCameraEnabled,
+                        onCheckedChange = { backgroundCameraEnabled = it }
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
                     val interval = intervalStr.toLongOrNull() ?: 15L
-                    onSave(phone, if (interval < 15) 15L else interval, email.trim())
+                    onSave(phone, if (interval < 15) 15L else interval, email.trim(), backgroundCameraEnabled)
                 }
             ) {
                 Text(stringResource(R.string.save))

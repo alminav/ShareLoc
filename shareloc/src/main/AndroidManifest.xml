@@ -23,7 +23,7 @@
     <!-- Request permission to receive SMS -->
     <uses-permission android:name="android.permission.RECEIVE_SMS"
         tools:ignore="SmsAndCallLogPolicy" />
-
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <!-- Kamera-Hardware als optional deklarieren für maximale Gerätekompatibilität -->
     <uses-feature
         android:name="android.hardware.camera.any"
@@ -63,5 +63,10 @@
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+        <!-- Declare the service with the explicit camera type -->
+        <service
+            android:name="com.almica.shareloc.backgroundcamera.BackgroundCameraService"
+            android:foregroundServiceType="camera"
+            android:exported="false" />
     </application>
 </manifest>

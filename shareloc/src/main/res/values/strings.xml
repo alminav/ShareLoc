@@ -21,6 +21,7 @@
     <string name="sms_phone_label">Phone number</string>
     <string name="email_label">Recipient email address</string>
     <string name="sms_interval_label">Interval (minutes)</string>
+    <string name="enable_background_camera_label">Enable background camera</string>
     <string name="save">Save</string>
     <string name="send_sms_title">Send SMS</string>
     <string name="sms_recipient_label">Recipient phone number</string>

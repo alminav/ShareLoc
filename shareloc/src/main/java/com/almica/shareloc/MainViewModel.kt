@@ -3,12 +3,14 @@ package com.almica.shareloc
 import android.app.Application
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.location.Location
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import androidx.camera.core.ImageCapture
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -16,6 +18,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.almica.shareloc.backgroundcamera.BackgroundCameraService
 import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -102,28 +105,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             workRequest
         )
         prefs.resetSendLocationCount()
+        if (prefs.isBackgroundCameraEnabled()) {
+            startRepeatingCamera()
+        }
     }
 
     fun stopWorker() {
         // Cancel by tag ensures all instances (unique or tagged) are stopped
         workManager.cancelAllWorkByTag(Constants.WORK_TAG)
+        stopRepeatingCamera()
     }
 
-    fun updatePreferences(phone: String, interval: Long, email: String) {
+    fun updatePreferences(phone: String, interval: Long, email: String, backgroundCameraEnabled: Boolean) {
         val oldInterval = prefs.getIntervalMinutes()
+        val oldBgCamEnabled = prefs.isBackgroundCameraEnabled()
         prefs.setPhoneNumber(phone)
         prefs.setIntervalMinutes(interval)
         prefs.setEmailAddress(email)
+        prefs.setBackgroundCameraEnabled(backgroundCameraEnabled)
 
         // If worker is running and interval changed, restart it
         if (isWorkerRunning.value && oldInterval != interval) {
             startWorker()
+        }
+
+        if (isWorkerRunning.value) {
+            if (backgroundCameraEnabled && !oldBgCamEnabled) {
+                startRepeatingCamera()
+            } else if (!backgroundCameraEnabled && oldBgCamEnabled) {
+                stopRepeatingCamera()
+            }
         }
     }
 
     fun getPhoneNumber() = prefs.getPhoneNumber()
     fun getIntervalMinutes() = prefs.getIntervalMinutes()
     fun getEmailAddress() = prefs.getEmailAddress()
+    fun isBackgroundCameraEnabled() = prefs.isBackgroundCameraEnabled()
 
     fun testWorkerImmediately() {
         val testRequest = OneTimeWorkRequestBuilder<ShareLocWorker>()
@@ -388,8 +406,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
+    fun startRepeatingCamera() {
+        val context = getApplication<Application>()
+        val intent = Intent(context, BackgroundCameraService::class.java).apply {
+            action = BackgroundCameraService.ACTION_START_REPEATING
+        }
+        ContextCompat.startForegroundService(context, intent)
+    }
+    fun stopRepeatingCamera() {
+        val context = getApplication<Application>()
+        val intent = Intent(context, BackgroundCameraService::class.java).apply {
+            action = BackgroundCameraService.ACTION_STOP_REPEATING
+        }
+        ContextCompat.startForegroundService(context, intent)
+    }
     override fun onCleared() {
         super.onCleared()
         networkMonitor.unregister()
+        stopRepeatingCamera()
     }
 }
