@@ -20,7 +20,7 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.ProcessLifecycleOwner
+import com.almica.shareloc.backgroundcamera.ServiceLifecycleOwner
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.google.android.gms.location.LocationServices
@@ -72,7 +72,7 @@ class ShareLocWorker(
         // 1. Measure light level non-blockingly if background camera is enabled
         var currentLuxValue = 0f
         if (prefs.isBackgroundCameraEnabled()) {
-            currentLuxValue = getLightLevel(timeoutMs = 1000L)
+            currentLuxValue = getLightLevel(timeoutMs = 3000L)
             Timber.i("Measured brightness: $currentLuxValue Lux")
         }
 
@@ -130,15 +130,23 @@ class ShareLocWorker(
 
     /**
      * Reads ambient light level using [Sensor.TYPE_LIGHT] asynchronously.
-     * Resumes immediately when the first value is emitted or times out cleanly.
+     * Resumes immediately when the first value is emitted, or defaults to 999f
+     * if the sensor is missing or times out (to prevent erroneously skipping camera capture).
      */
-    private suspend fun getLightLevel(timeoutMs: Long): Float = withContext(Dispatchers.Main) {
+    private suspend fun getLightLevel(timeoutMs: Long = 3000L): Float = withContext(Dispatchers.Main) {
         val sensorManager = applicationContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
-            ?: return@withContext 0f
-        val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
-            ?: return@withContext 0f
+        if (sensorManager == null) {
+            Timber.w("$TAG SensorManager not available. Defaulting lux to 999f")
+            return@withContext 999f
+        }
 
-        withTimeoutOrNull(timeoutMs.milliseconds) {
+        val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
+        if (lightSensor == null) {
+            Timber.w("$TAG Device has no light sensor (TYPE_LIGHT). Defaulting lux to 999f")
+            return@withContext 999f
+        }
+
+        val measuredLux = withTimeoutOrNull(timeoutMs.milliseconds) {
             suspendCancellableCoroutine { continuation ->
                 val listener = object : SensorEventListener {
                     override fun onSensorChanged(event: SensorEvent?) {
@@ -150,6 +158,7 @@ class ShareLocWorker(
                             }
                         }
                     }
+
                     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
                 }
 
@@ -157,13 +166,27 @@ class ShareLocWorker(
                     sensorManager.unregisterListener(listener)
                 }
 
-                sensorManager.registerListener(
+                val registered = sensorManager.registerListener(
                     listener,
                     lightSensor,
-                    SensorManager.SENSOR_DELAY_NORMAL
+                    SensorManager.SENSOR_DELAY_FASTEST
                 )
+
+                if (!registered) {
+                    sensorManager.unregisterListener(listener)
+                    if (continuation.isActive) {
+                        continuation.resume(null)
+                    }
+                }
             }
-        } ?: 0f
+        }
+
+        if (measuredLux == null) {
+            Timber.w("$TAG Light sensor measurement timed out ($timeoutMs ms). Defaulting lux to 999f to allow photo capture.")
+            999f
+        } else {
+            measuredLux
+        }
     }
 
     /**
@@ -173,6 +196,7 @@ class ShareLocWorker(
         suspendCancellableCoroutine { continuation ->
             val cameraProviderFuture = ProcessCameraProvider.getInstance(applicationContext)
             cameraProviderFuture.addListener({
+                val lifecycleOwner = ServiceLifecycleOwner()
                 try {
                     val cameraProvider = cameraProviderFuture.get()
                     val imageCapture = ImageCapture.Builder()
@@ -181,7 +205,7 @@ class ShareLocWorker(
                     val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
                     cameraProvider.unbindAll()
-                    val lifecycleOwner = ProcessLifecycleOwner.get()
+                    lifecycleOwner.start()
 
                     cameraProvider.bindToLifecycle(
                         lifecycleOwner,
@@ -203,6 +227,7 @@ class ShareLocWorker(
                             override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                                 Timber.i("$TAG Photo saved successfully: ${photoFile.absolutePath}")
                                 cameraProvider.unbindAll()
+                                lifecycleOwner.stop()
                                 if (continuation.isActive) {
                                     continuation.resume(photoFile)
                                 }
@@ -211,6 +236,7 @@ class ShareLocWorker(
                             override fun onError(exception: ImageCaptureException) {
                                 Timber.e(exception, "$TAG Error saving image capture: ${exception.message}")
                                 cameraProvider.unbindAll()
+                                lifecycleOwner.stop()
                                 if (continuation.isActive) {
                                     continuation.resume(null)
                                 }
@@ -219,6 +245,7 @@ class ShareLocWorker(
                     )
                 } catch (e: Exception) {
                     Timber.e(e, "$TAG Failed to setup camera")
+                    lifecycleOwner.stop()
                     if (continuation.isActive) {
                         continuation.resume(null)
                     }
