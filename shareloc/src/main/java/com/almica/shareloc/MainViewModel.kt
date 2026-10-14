@@ -13,7 +13,9 @@ import androidx.camera.core.ImageCapture
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkInfo
@@ -92,9 +94,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startWorker() {
         val interval = prefs.getIntervalMinutes()
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
         val workRequest = PeriodicWorkRequestBuilder<ShareLocWorker>(
             interval, TimeUnit.MINUTES
         )
+            .setConstraints(constraints)
             .addTag(Constants.WORK_TAG)
             .build()
 
@@ -105,15 +112,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             workRequest
         )
         prefs.resetSendLocationCount()
-        if (prefs.isBackgroundCameraEnabled()) {
-            startRepeatingCamera()
-        }
+//        if (prefs.isBackgroundCameraEnabled()) {
+//            startRepeatingCamera()
+//        }
     }
 
     fun stopWorker() {
         // Cancel by tag ensures all instances (unique or tagged) are stopped
         workManager.cancelAllWorkByTag(Constants.WORK_TAG)
-        stopRepeatingCamera()
+        //stopRepeatingCamera()
     }
 
     fun updatePreferences(phone: String, interval: Long, email: String, backgroundCameraEnabled: Boolean) {
@@ -129,13 +136,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             startWorker()
         }
 
-        if (isWorkerRunning.value) {
-            if (backgroundCameraEnabled && !oldBgCamEnabled) {
-                startRepeatingCamera()
-            } else if (!backgroundCameraEnabled && oldBgCamEnabled) {
-                stopRepeatingCamera()
-            }
-        }
+//        if (isWorkerRunning.value) {
+//            if (backgroundCameraEnabled && !oldBgCamEnabled) {
+//                startRepeatingCamera()
+//            } else if (!backgroundCameraEnabled && oldBgCamEnabled) {
+//                stopRepeatingCamera()
+//            }
+//        }
     }
 
     fun getPhoneNumber() = prefs.getPhoneNumber()
@@ -144,7 +151,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun isBackgroundCameraEnabled() = prefs.isBackgroundCameraEnabled()
 
     fun testWorkerImmediately() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
         val testRequest = OneTimeWorkRequestBuilder<ShareLocWorker>()
+            .setConstraints(constraints)
             .addTag(Constants.WORK_TAG)
             .addTag("test_worker")
             .build()
@@ -423,6 +435,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         networkMonitor.unregister()
-        stopRepeatingCamera()
+        //stopRepeatingCamera()
     }
 }

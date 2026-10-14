@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.BatteryManager
 import android.telephony.TelephonyManager
@@ -31,6 +32,14 @@ object Constants {
     const val KEY_IMAGE_URL = "image_url"
     const val KEY_EMAIL_ADDRESS = "email_address"
     const val KEY_BACKGROUND_CAMERA_ENABLED = "background_camera_enabled"
+}
+
+fun isNetworkAvailable(context: Context): Boolean {
+    val connectivityManager = (context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)
+        ?: return false
+    val activeNetwork = connectivityManager.activeNetwork ?: return false
+    val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }
 
 fun isShareLocEnabled(context: Context): Pair<Boolean, Float> {
@@ -121,6 +130,12 @@ suspend fun sendLocation(
             Timber.e("Failed to send location: code ${response.code()}, message ${body?.message}")
             false
         }
+    } catch (e: java.net.UnknownHostException) {
+        Timber.w("Unable to resolve host (network/DNS unavailable): ${e.message}")
+        false
+    } catch (e: java.io.IOException) {
+        Timber.w("Network error sending location: ${e.message}")
+        false
     } catch (e: Exception) {
         Timber.e(e, "Error sending location")
         false
@@ -191,6 +206,12 @@ suspend fun sendEmail(
             Timber.e("Failed to send mail: code ${response.code()}")
             false
         }
+    } catch (e: java.net.UnknownHostException) {
+        Timber.w("Unable to resolve host sending mail (network/DNS unavailable): ${e.message}")
+        false
+    } catch (e: java.io.IOException) {
+        Timber.w("Network error sending mail: ${e.message}")
+        false
     } catch (e: Exception) {
         Timber.e(e, "Error sending mail")
         false

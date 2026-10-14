@@ -41,6 +41,25 @@ import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+/**
+ * 14Okt2026: Background camera logic copied to ShareLocWorker.
+ * Now BackgroundCameraService is not used.
+ * But it may be useful, to take pictures in short intervals.
+ * In ShareLocWorker shortest interval is 15 min.
+ * ===================================================================
+ * Die Kamera wird erst im Moment der Messung initialisiert, gebunden,
+ * löst aus und wird sofort wieder komplett freigegeben (unbindAll()).
+ * Dadurch fällt die Hardware im Leerlauf in den echten Tiefschlaf.
+ *
+ * Warum das den Akku rettet:
+ *
+ * 1. Vorher: Die Kamera war permanent blockiert. Das erkennst du meistens auch daran,
+ *      dass der grüne Datenschutz-Punkt in der Statusleiste deines Smartphones permanent leuchtete.
+ * 2. Nachher: Der grüne Datenschutz-Punkt flammt jetzt nur noch alle 15 Minuten für ca. 2 bis 3 Sekunden kurz auf.
+ *      Sobald das Bild auf der Festplatte liegt, wird cameraProvider.unbindAll() gerufen, die Kamera schaltet sich physikalisch ab,
+ *      der grüne Punkt verschwindet, und das Gerät verbraucht im Leerlauf exakt 0 % zusätzlichen Kamera-Strom.
+ *
+ */
 class BackgroundCameraService : Service(), SensorEventListener {
 
     private lateinit var cameraExecutor: ExecutorService
@@ -60,29 +79,103 @@ class BackgroundCameraService : Service(), SensorEventListener {
     // Das Runnable, das sich immer wieder selbst aufruft
     private val repeatingCaptureRunnable = object : Runnable {
         override fun run() {
-            if (isRepeating) {
-                if (lightSensor != null)
-                    sensorManager.registerListener(this@BackgroundCameraService, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
-                // Warte 1 Sekunde auf den Sensorwert, beende dann den Sensor und verarbeite das Foto
+            if (isRepeating && lightSensor != null) {
+
+                // 1. Lichtsensor kurz für die Messung aktivieren
+                sensorManager.registerListener(
+                    this@BackgroundCameraService,
+                    lightSensor,
+                    SensorManager.SENSOR_DELAY_NORMAL
+                )
+                Timber.i("$TAG Sensor für Messung aktiviert...")
+
                 mainHandler.postDelayed({
+                    // 2. Sensor sofort wieder abschalten
+                    sensorManager.unregisterListener(this@BackgroundCameraService)
+                    Timber.i("$TAG Gemessener Wert: $currentLuxValue Lux")
 
-                    // AUCH HIER: this@BackgroundCameraService nutzen
-                    if (lightSensor != null)
-                        sensorManager.unregisterListener(this@BackgroundCameraService)
-                    Timber.i("$TAG Sensor wieder schlafen gelegt. Wert: $currentLuxValue Lux")
-
+                    // 3. Helligkeitsprüfung (Emulator ausgenommen)
                     if (currentLuxValue >= LUX_THRESHOLD) {
-                        capturePhotoInBackground()
+
+                        // HIER DIE ÄNDERUNG: Kamera erst jetzt initialisieren und binden
+                        prepareAndCapturePhoto() // !! Akku verbrauch sonst sehr hoch
+
                     } else {
                         Timber.i("$TAG Foto übersprungen: Zu dunkel.")
+                        // Da kein Foto gemacht wird, direkt das nächste 15-Minuten-Intervall planen
+                        mainHandler.postDelayed(this, captureIntervalMs)
                     }
 
-                    // Nächstes Intervall planen
-                    mainHandler.postDelayed(this, captureIntervalMs)
-
-                }, 1000)
+                }, 1000) // 1 Sekunde Wartezeit für den Sensor
             }
         }
+    }
+
+    // Ersetze sie durch diese dynamische Methode:
+    private fun prepareAndCapturePhoto() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        cameraProviderFuture.addListener({
+            try {
+                val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+
+                imageCapture = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
+
+                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+                // Unbind aller alten Bindungen und frisches Binden der Hardware
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, imageCapture)
+
+                // Kamera ist nun scharf geschaltet -> Foto schießen
+                executeTakePicture(cameraProvider)
+
+            } catch (e: Exception) {
+                Timber.e("$TAG Fehler beim Kamera-Setup $e")
+                // Bei Fehlern das nächste Intervall trotzdem sichern
+                mainHandler.postDelayed(repeatingCaptureRunnable, captureIntervalMs)
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun executeTakePicture(cameraProvider: ProcessCameraProvider) {
+        val imageCapture = imageCapture ?: return
+
+        val outputDirectory = getExternalFilesDir(null) ?: filesDir
+        val photoFile = File(
+            outputDirectory,
+            SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(System.currentTimeMillis()) + ".jpg"
+        )
+
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+
+        imageCapture.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                    Timber.i("$TAG Foto gespeichert: ${photoFile.absolutePath}")
+                    cleanupCamera(cameraProvider)
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    Timber.e("$TAG Fehler beim Speichern: ${exception.message}")
+                    cleanupCamera(cameraProvider)
+                }
+            }
+        )
+    }
+
+    // WICHTIGSTE FUNKTION FÜR DEN AKKU: Die Hardware wieder freigeben!
+    private fun cleanupCamera(cameraProvider: ProcessCameraProvider) {
+        // Löst die Bindung zu CameraX auf, wodurch die Hardware komplett abgeschaltet wird
+        cameraProvider.unbindAll()
+        imageCapture = null
+        Timber.i("$TAG Kamera-Hardware erfolgreich heruntergefahren und entkoppelt.")
+
+        // Jetzt, wo die Kamera sicher aus ist, planen wir das nächste 15-Minuten-Intervall
+        mainHandler.postDelayed(repeatingCaptureRunnable, captureIntervalMs)
     }
 
     companion object {
@@ -104,7 +197,7 @@ class BackgroundCameraService : Service(), SensorEventListener {
         lifecycleOwner.start()
         Timber.i("Interval in Minutes: ${prefs.getIntervalMinutes()}")
         startForeground(NOTIFICATION_ID, createNotification())
-        initializeCameraX()
+//        initializeCameraX()
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
 //        //val customDelayMicroseconds = (0.5 * captureIntervalMs *1000).toInt()
