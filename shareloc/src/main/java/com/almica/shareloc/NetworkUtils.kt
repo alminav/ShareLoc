@@ -32,6 +32,7 @@ object Constants {
     const val KEY_IMAGE_URL = "image_url"
     const val KEY_EMAIL_ADDRESS = "email_address"
     const val KEY_BACKGROUND_CAMERA_ENABLED = "background_camera_enabled"
+    const val KEY_BG_CAMERA_INTERVAL_MINS = "bg_camera_interval_minutes"
 }
 
 fun isNetworkAvailable(context: Context): Boolean {

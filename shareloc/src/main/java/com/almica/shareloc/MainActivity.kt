@@ -356,9 +356,10 @@ fun MainScreen(viewModel: MainViewModel) {
             currentInterval = viewModel.getIntervalMinutes(),
             currentEmail = viewModel.getEmailAddress(),
             currentBackgroundCameraEnabled = viewModel.isBackgroundCameraEnabled(),
+            currentBackgroundCameraInterval = viewModel.getBackgroundCameraIntervalMinutes(),
             onDismiss = { showSettingsDialog = false },
-            onSave = { phone, interval, email, backgroundCameraEnabled ->
-                viewModel.updatePreferences(phone, interval, email, backgroundCameraEnabled)
+            onSave = { phone, interval, email, backgroundCameraEnabled, bgCameraInterval ->
+                viewModel.updatePreferences(phone, interval, email, backgroundCameraEnabled, bgCameraInterval)
                 showSettingsDialog = false
             }
         )
@@ -463,13 +464,15 @@ fun SettingsDialog(
     currentInterval: Long,
     currentEmail: String,
     currentBackgroundCameraEnabled: Boolean,
+    currentBackgroundCameraInterval: Float,
     onDismiss: () -> Unit,
-    onSave: (phone: String, interval: Long, email: String, backgroundCameraEnabled: Boolean) -> Unit
+    onSave: (phone: String, interval: Long, email: String, backgroundCameraEnabled: Boolean, bgCameraInterval: Float) -> Unit
 ) {
     var phone by remember { mutableStateOf(currentPhone) }
     var intervalStr by remember { mutableStateOf(currentInterval.toString()) }
     var email by remember { mutableStateOf(currentEmail) }
     var backgroundCameraEnabled by remember { mutableStateOf(currentBackgroundCameraEnabled) }
+    var bgCameraIntervalStr by remember { mutableStateOf(currentBackgroundCameraInterval.toString()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -519,13 +522,31 @@ fun SettingsDialog(
                         onCheckedChange = { backgroundCameraEnabled = it }
                     )
                 }
+                if (backgroundCameraEnabled) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = bgCameraIntervalStr,
+                        onValueChange = { bgCameraIntervalStr = it },
+                        label = { Text(stringResource(R.string.bg_camera_interval_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = {
                     val interval = intervalStr.toLongOrNull() ?: 15L
-                    onSave(phone, if (interval < 15) 15L else interval, email.trim(), backgroundCameraEnabled)
+                    val bgCameraInterval = bgCameraIntervalStr.replace(',', '.').toFloatOrNull() ?: 0.25f
+                    onSave(
+                        phone,
+                        if (interval < 15) 15L else interval,
+                        email.trim(),
+                        backgroundCameraEnabled,
+                        if (bgCameraInterval <= 0f) 0.25f else bgCameraInterval
+                    )
                 }
             ) {
                 Text(stringResource(R.string.save))

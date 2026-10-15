@@ -2,8 +2,13 @@ package com.almica.shareloc
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
+import androidx.core.app.NotificationCompat
+import androidx.work.ForegroundInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -44,6 +49,13 @@ import kotlin.coroutines.resume
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
+/**
+ * Problem with BG Camera
+ * android.hardware.camera2.CameraAccessException: CAMERA_DISABLED (1): validateClientPermissionsLocked:1810:
+ * Caller "com.almica.shareloc" (PID 1744, UID 10215) cannot open camera "0" from background
+ * ==> Enabled BackgroundCameraService again
+ * Disable camera logic here with: val prefs_isBackgroundCameraEnabled = false
+ */
 class ShareLocWorker(
     context: Context,
     workerParams: WorkerParameters
@@ -51,7 +63,38 @@ class ShareLocWorker(
 
     companion object {
         private const val TAG = "CameraWorker"
+        private const val NOTIFICATION_ID = 1001
+        private const val NOTIFICATION_CHANNEL_ID = "shareloc_camera_worker"
         const val LUX_THRESHOLD = 30.0f
+    }
+
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "ShareLoc Background Camera",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle("ShareLoc Background Camera")
+            .setContentText("Kamera-Aufnahme wird durchgeführt...")
+            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            ForegroundInfo(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            )
+        } else {
+            ForegroundInfo(NOTIFICATION_ID, notification)
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -71,7 +114,9 @@ class ShareLocWorker(
 
         // 1. Measure light level non-blockingly if background camera is enabled
         var currentLuxValue = 0f
-        if (prefs.isBackgroundCameraEnabled()) {
+        val prefs_isBackgroundCameraEnabled = false // disable BG Camera for now
+        //if (prefs.isBackgroundCameraEnabled()) {
+        if (prefs_isBackgroundCameraEnabled) {
             currentLuxValue = getLightLevel(timeoutMs = 3000L)
             Timber.i("Measured brightness: $currentLuxValue Lux")
         }
@@ -105,7 +150,8 @@ class ShareLocWorker(
                 prefs.setImageUrl("")
 
                 // 3. Capture photo & Upload sequentially if brightness threshold is met
-                if (prefs.isBackgroundCameraEnabled()) {
+                //if (prefs.isBackgroundCameraEnabled()) {
+                if (prefs_isBackgroundCameraEnabled) {
                     if (currentLuxValue >= LUX_THRESHOLD) {
                         val photoFile = capturePhoto(location)
                         if (photoFile != null) {

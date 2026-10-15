@@ -1,259 +1,116 @@
 package com.almica.shareloc.backgroundcamera
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Build
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
+import android.os.CancellationSignal
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.coroutineScope
+import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.almica.shareloc.NetworkClient
 import com.almica.shareloc.PreferenceManager
-import com.almica.shareloc.UploadResponse
 import com.almica.shareloc.compressImageFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
-import retrofit2.Response
 import timber.log.Timber
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import kotlin.coroutines.resume
+import kotlin.time.Duration.Companion.milliseconds
 
-/**
- * 14Okt2026: Background camera logic copied to ShareLocWorker.
- * Now BackgroundCameraService is not used.
- * But it may be useful, to take pictures in short intervals.
- * In ShareLocWorker shortest interval is 15 min.
- * ===================================================================
- * Die Kamera wird erst im Moment der Messung initialisiert, gebunden,
- * löst aus und wird sofort wieder komplett freigegeben (unbindAll()).
- * Dadurch fällt die Hardware im Leerlauf in den echten Tiefschlaf.
- *
- * Warum das den Akku rettet:
- *
- * 1. Vorher: Die Kamera war permanent blockiert. Das erkennst du meistens auch daran,
- *      dass der grüne Datenschutz-Punkt in der Statusleiste deines Smartphones permanent leuchtete.
- * 2. Nachher: Der grüne Datenschutz-Punkt flammt jetzt nur noch alle 15 Minuten für ca. 2 bis 3 Sekunden kurz auf.
- *      Sobald das Bild auf der Festplatte liegt, wird cameraProvider.unbindAll() gerufen, die Kamera schaltet sich physikalisch ab,
- *      der grüne Punkt verschwindet, und das Gerät verbraucht im Leerlauf exakt 0 % zusätzlichen Kamera-Strom.
- *
- */
-class BackgroundCameraService : Service(), SensorEventListener {
+class BackgroundCameraService : LifecycleService() {
 
-    private lateinit var cameraExecutor: ExecutorService
-    private var imageCapture: ImageCapture? = null
-    private val lifecycleOwner = ServiceLifecycleOwner()
-
-    // Handler für das Timing der wiederholten Aufrufe
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var isRepeating = false
+    private var captureJob: Job? = null
     private val prefs by lazy { PreferenceManager(this) }
-    private val captureIntervalMs get() = prefs.getIntervalMinutes() * 60000L
-    // Sensor-Variablen
-    private lateinit var sensorManager: SensorManager
-    private var lightSensor: Sensor? = null
-    private var currentLuxValue: Float = 0f
 
-    // Das Runnable, das sich immer wieder selbst aufruft
-    private val repeatingCaptureRunnable = object : Runnable {
-        override fun run() {
-            if (isRepeating && lightSensor != null) {
+    private val captureIntervalMs: Long
+        get() = maxOf(5_000L, (prefs.getBackgroundCameraIntervalMinutes() * 60_000f).toLong())
 
-                // 1. Lichtsensor kurz für die Messung aktivieren
-                sensorManager.registerListener(
-                    this@BackgroundCameraService,
-                    lightSensor,
-                    SensorManager.SENSOR_DELAY_NORMAL
-                )
-                Timber.i("$TAG Sensor für Messung aktiviert...")
-
-                mainHandler.postDelayed({
-                    // 2. Sensor sofort wieder abschalten
-                    sensorManager.unregisterListener(this@BackgroundCameraService)
-                    Timber.i("$TAG Gemessener Wert: $currentLuxValue Lux")
-
-                    // 3. Helligkeitsprüfung (Emulator ausgenommen)
-                    if (currentLuxValue >= LUX_THRESHOLD) {
-
-                        // HIER DIE ÄNDERUNG: Kamera erst jetzt initialisieren und binden
-                        prepareAndCapturePhoto() // !! Akku verbrauch sonst sehr hoch
-
-                    } else {
-                        Timber.i("$TAG Foto übersprungen: Zu dunkel.")
-                        // Da kein Foto gemacht wird, direkt das nächste 15-Minuten-Intervall planen
-                        mainHandler.postDelayed(this, captureIntervalMs)
-                    }
-
-                }, 1000) // 1 Sekunde Wartezeit für den Sensor
-            }
-        }
-    }
-
-    // Ersetze sie durch diese dynamische Methode:
-    private fun prepareAndCapturePhoto() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.addListener({
-            try {
-                val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-
-                imageCapture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                    .build()
-
-                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
-                // Unbind aller alten Bindungen und frisches Binden der Hardware
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, imageCapture)
-
-                // Kamera ist nun scharf geschaltet -> Foto schießen
-                executeTakePicture(cameraProvider)
-
-            } catch (e: Exception) {
-                Timber.e("$TAG Fehler beim Kamera-Setup $e")
-                // Bei Fehlern das nächste Intervall trotzdem sichern
-                mainHandler.postDelayed(repeatingCaptureRunnable, captureIntervalMs)
-            }
-        }, ContextCompat.getMainExecutor(this))
-    }
-
-    private fun executeTakePicture(cameraProvider: ProcessCameraProvider) {
-        val imageCapture = imageCapture ?: return
-
-        val outputDirectory = getExternalFilesDir(null) ?: filesDir
-        val photoFile = File(
-            outputDirectory,
-            SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(System.currentTimeMillis()) + ".jpg"
-        )
-
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-
-        imageCapture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(this),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    Timber.i("$TAG Foto gespeichert: ${photoFile.absolutePath}")
-                    cleanupCamera(cameraProvider)
-                }
-
-                override fun onError(exception: ImageCaptureException) {
-                    Timber.e("$TAG Fehler beim Speichern: ${exception.message}")
-                    cleanupCamera(cameraProvider)
-                }
-            }
-        )
-    }
-
-    // WICHTIGSTE FUNKTION FÜR DEN AKKU: Die Hardware wieder freigeben!
-    private fun cleanupCamera(cameraProvider: ProcessCameraProvider) {
-        // Löst die Bindung zu CameraX auf, wodurch die Hardware komplett abgeschaltet wird
-        cameraProvider.unbindAll()
-        imageCapture = null
-        Timber.i("$TAG Kamera-Hardware erfolgreich heruntergefahren und entkoppelt.")
-
-        // Jetzt, wo die Kamera sicher aus ist, planen wir das nächste 15-Minuten-Intervall
-        mainHandler.postDelayed(repeatingCaptureRunnable, captureIntervalMs)
-    }
-
-    companion object {
-        private const val TAG = "BgCameraService"
-        private const val CHANNEL_ID = "BackgroundCameraChannel"
-        private const val NOTIFICATION_ID = 101
-
-        // Neue Actions für die Steuerung
-        const val ACTION_START_REPEATING = "ACTION_START_REPEATING"
-        const val ACTION_STOP_REPEATING = "ACTION_STOP_REPEATING"
-        // Schwellenwert für ausreichende Helligkeit (in Lux)
-        // 10 Lux = Sehr dunkler Raum, 50 Lux = Wohnzimmerbeleuchtung, 500 Lux = Helles Büro/Tageslicht
-        const val LUX_THRESHOLD = 30.0f
+    private val locationManager: LocationManager by lazy {
+        getSystemService(LOCATION_SERVICE) as LocationManager
     }
 
     override fun onCreate() {
         super.onCreate()
-        cameraExecutor = Executors.newSingleThreadExecutor()
-        lifecycleOwner.start()
-        Timber.i("Interval in Minutes: ${prefs.getIntervalMinutes()}")
-        startForeground(NOTIFICATION_ID, createNotification())
-//        initializeCameraX()
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
-//        //val customDelayMicroseconds = (0.5 * captureIntervalMs *1000).toInt()
-//        //Timber.i("$TAG Custom Delay in Microseconds: $customDelayMicroseconds")
-//        if (lightSensor != null) {
-//            // Sensor registrieren (SENSOR_DELAY_NORMAL reicht für Intervallaufnahmen völlig aus)
-//            sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL) // customDelayMicroseconds
-//            Timber.i("$TAG Lichtsensor erfolgreich registriert.")
-//        } else {
-//            Timber.e("$TAG Gerät besitzt keinen Lichtsensor! Es wird ohne Helligkeitsprüfung fotografiert.")
-//            // Ausweichlösung: Schwellenwert auf 0 setzen, damit immer fotografiert wird
-//            currentLuxValue = 999f
-//        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            startForeground(
+                NOTIFICATION_ID,
+                createNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, createNotification())
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
-            ACTION_START_REPEATING -> {
-                if (!isRepeating) {
-                    isRepeating = true
-                    // Starte die Zeitschleife
-                    mainHandler.post(repeatingCaptureRunnable)
-                    Timber.i("$TAG Wiederholte Aufnahme gestartet.")
-                }
-            }
-            ACTION_STOP_REPEATING -> {
-                stopRepeatingAndService()
-            }
+            ACTION_START_REPEATING -> startRepeatingCapture()
+            ACTION_STOP_REPEATING -> stopRepeatingAndService()
         }
         return START_NOT_STICKY
     }
 
-    private fun initializeCameraX() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        cameraProviderFuture.addListener({
-            try {
-                val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-                imageCapture = ImageCapture.Builder()
-                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                    .build()
+    private fun startRepeatingCapture() {
+        captureJob?.cancel()
 
-                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-                cameraProvider.unbindAll()
-                cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, imageCapture)
-                Timber.i("$TAG CameraX erfolgreich initialisiert.")
-            } catch (e: Exception) {
-                Timber.e("$TAG Fehler bei CameraX Bindung $e")
+        captureJob = lifecycleScope.launch {
+            Timber.i("$TAG Wiederholte Aufnahme gestartet. Intervall: ${captureIntervalMs / 1000}s")
+            while (isActive) {
+                // 1. Fresh ambient light check on every cycle
+                val lux = getLightLevel()
+                Timber.i("$TAG Aktuelle Helligkeit: $lux Lux")
+
+                if (lux >= LUX_THRESHOLD) {
+                    capturePhotoAndProcess()
+                } else {
+                    Timber.i("$TAG Foto übersprungen: Zu dunkel ($lux Lux).")
+                }
+
+                // Wait for next interval
+                delay(captureIntervalMs.milliseconds)
             }
-        }, ContextCompat.getMainExecutor(this))
+        }
     }
 
-    private fun capturePhotoInBackground() {
-        val imageCapture = imageCapture ?: run {
-            Timber.e("$TAG Kamera noch nicht bereit.")
-            return
-        }
+    private fun stopRepeatingAndService() {
+        captureJob?.cancel()
+        captureJob = null
+        Timber.i("$TAG Wiederholte Aufnahme gestoppt.")
+        stopSelf()
+    }
+
+    private suspend fun capturePhotoAndProcess() {
+        val cameraProvider = getProcessCameraProvider() ?: return
 
         val outputDirectory = externalCacheDir ?: cacheDir
         val photoFile = File(
@@ -261,31 +118,127 @@ class BackgroundCameraService : Service(), SensorEventListener {
             SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(System.currentTimeMillis()) + ".jpg"
         )
 
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        try {
+            val imageCapture = ImageCapture.Builder()
+                .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                .build()
 
-        imageCapture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(this),
-            object : ImageCapture.OnImageSavedCallback {
-                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-                    Timber.i("$TAG Foto gespeichert: ${photoFile.absolutePath}")
-                    uploadImageToBplaced(photoFile) { response ->
-                        Timber.i("$TAG Server Antwort: ${response.body()?.message}")
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+            cameraProvider.unbindAll()
+            cameraProvider.bindToLifecycle(this, cameraSelector, imageCapture)
+
+            val savedFile = suspendCancellableCoroutine { continuation ->
+                val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                imageCapture.takePicture(
+                    outputOptions,
+                    ContextCompat.getMainExecutor(this@BackgroundCameraService),
+                    object : ImageCapture.OnImageSavedCallback {
+                        override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                            if (continuation.isActive) continuation.resume(photoFile)
+                        }
+
+                        override fun onError(exception: ImageCaptureException) {
+                            Timber.e(exception, "$TAG Fehler beim Speichern des Fotos")
+                            if (continuation.isActive) continuation.resume(null)
+                        }
                     }
-                }
-
-                override fun onError(exception: ImageCaptureException) {
-                    Timber.e(exception, "$TAG Fehler beim Speichern: ${exception.message}")
-                }
+                )
             }
-        )
+
+            if (savedFile != null && savedFile.exists()) {
+                Timber.i("$TAG Foto gespeichert: ${savedFile.absolutePath}")
+                uploadImage(savedFile)
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "$TAG Fehler während des Aufnahmeablaufs")
+        } finally {
+            // Unbind camera hardware to save battery
+            cameraProvider.unbindAll()
+            Timber.i("$TAG Kamera-Hardware entkoppelt.")
+        }
     }
 
-    private fun stopRepeatingAndService() {
-        isRepeating = false
-        mainHandler.removeCallbacks(repeatingCaptureRunnable)
-        Timber.i("$TAG Wiederholte Aufnahme gestoppt.")
-        stopSelf() // Beendet den gesamten Service, wenn er nicht mehr gebraucht wird
+    private suspend fun getProcessCameraProvider(): ProcessCameraProvider? =
+        suspendCancellableCoroutine { continuation ->
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+            cameraProviderFuture.addListener({
+                try {
+                    continuation.resume(cameraProviderFuture.get())
+                } catch (e: Exception) {
+                    Timber.e(e, "$TAG Fehler beim Kamera-Provider Setup")
+                    if (continuation.isActive) continuation.resume(null)
+                }
+            }, ContextCompat.getMainExecutor(this))
+        }
+
+    private suspend fun uploadImage(imageFile: File) {
+        withContext(Dispatchers.IO) {
+            try {
+                val currentLocation = locationManager.awaitCurrentLocation(applicationContext)
+                Timber.i("$TAG Upload Location: $currentLocation")
+
+                val compressedFile = compressImageFile(imageFile, imageFile, currentLocation)
+                val requestFile = compressedFile.asRequestBody("image/*".toMediaTypeOrNull())
+                val body = MultipartBody.Part.createFormData("image", compressedFile.name, requestFile)
+                val titleRequestBody = compressedFile.name.toRequestBody("text/plain".toMediaTypeOrNull())
+
+                val response = NetworkClient.bplacedApiService.uploadLocationWithPhoto(titleRequestBody, body)
+                if (response.isSuccessful && response.body() != null) {
+                    val serverResponse = response.body()!!
+                    Timber.i("$TAG Upload erfolgreich: ${serverResponse.message}")
+                } else {
+                    Timber.w("$TAG Server-Fehler Code: ${response.code()}")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG Upload fehlgeschlagen")
+            } finally {
+                // Delete photo file to avoid clogging device storage
+                if (imageFile.exists()) {
+                    imageFile.delete()
+                }
+            }
+        }
+    }
+
+    private suspend fun getLightLevel(timeoutMs: Long = 3000L): Float = withContext(Dispatchers.Main) {
+        val sensorManager = applicationContext.getSystemService(SENSOR_SERVICE) as? SensorManager
+            ?: return@withContext 999f
+
+        val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
+            ?: return@withContext 999f
+
+        val measuredLux = withTimeoutOrNull(timeoutMs.milliseconds) {
+            suspendCancellableCoroutine { continuation ->
+                val listener = object : SensorEventListener {
+                    override fun onSensorChanged(event: SensorEvent?) {
+                        if (event?.sensor?.type == Sensor.TYPE_LIGHT && event.values.isNotEmpty()) {
+                            val lux = event.values[0]
+                            sensorManager.unregisterListener(this)
+                            if (continuation.isActive) continuation.resume(lux)
+                        }
+                    }
+
+                    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+                }
+
+                continuation.invokeOnCancellation {
+                    sensorManager.unregisterListener(listener)
+                }
+
+                val registered = sensorManager.registerListener(
+                    listener,
+                    lightSensor,
+                    SensorManager.SENSOR_DELAY_FASTEST
+                )
+
+                if (!registered && continuation.isActive) {
+                    continuation.resume(null)
+                }
+            }
+        }
+
+        measuredLux ?: 999f
     }
 
     private fun createNotification(): Notification {
@@ -293,7 +246,7 @@ class BackgroundCameraService : Service(), SensorEventListener {
             val channel = NotificationChannel(
                 CHANNEL_ID, "Hintergrund-Kamera", NotificationManager.IMPORTANCE_LOW
             )
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
         }
 
@@ -305,74 +258,57 @@ class BackgroundCameraService : Service(), SensorEventListener {
             .build()
     }
 
-    override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_LIGHT) {
-            currentLuxValue = event.values[0]
-            Timber.i("$TAG Aktuelle Helligkeit: $currentLuxValue Lux")
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Nicht benötigt
-    }
-
     override fun onDestroy() {
+        captureJob?.cancel()
         super.onDestroy()
-        isRepeating = false
-        mainHandler.removeCallbacks(repeatingCaptureRunnable)
-        if (::sensorManager.isInitialized) {
-            sensorManager.unregisterListener(this)
-        }
-        lifecycleOwner.stop()
-        cameraExecutor.shutdown()
         Timber.i("$TAG Service zerstört.")
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    companion object {
+        private const val TAG = "BgCameraService"
+        private const val CHANNEL_ID = "BackgroundCameraChannel"
+        private const val NOTIFICATION_ID = 101
 
-    fun uploadImageToBplaced(imageFile: File, feedBack: (Response<UploadResponse>) -> Unit) {
-        if (!imageFile.exists()) {
-            Timber.i( "Datei existiert nicht!")
-            return
-        }
-        Timber.i("image: ${imageFile.name}")
+        const val ACTION_START_REPEATING = "ACTION_START_REPEATING"
+        const val ACTION_STOP_REPEATING = "ACTION_STOP_REPEATING"
+        const val LUX_THRESHOLD = 30.0f
+    }
+}
 
-        // 3. Im Hintergrund per Coroutine hochladen
-        lifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val compressedFile = compressImageFile(imageFile, imageFile, null)
-                Timber.i("Compressed file size: ${compressedFile.length()}")
-                // 1. Datei in RequestBody umwandeln (MIME-Type ermitteln oder allgemein "image/*" verwenden)
-                val requestFile = compressedFile.asRequestBody("image/*".toMediaTypeOrNull())
-                // 2. MultipartBody.Part erstellen. Der Name "image" MUSS exakt mit $_FILES['image'] im PHP übereinstimmen
-                val body = MultipartBody.Part.createFormData("image", compressedFile.name, requestFile)
-                val titleRequestBody = compressedFile.name.toRequestBody("text/plain".toMediaTypeOrNull())
-                Timber.i("title: $titleRequestBody")
-                val response = NetworkClient.bplacedApiService.uploadLocationWithPhoto(titleRequestBody, body)
+@SuppressLint("MissingPermission")
+suspend fun LocationManager.awaitCurrentLocation(
+    context: Context,
+    provider: String = LocationManager.GPS_PROVIDER
+): Location? = withContext(Dispatchers.Main.immediate) {
+    suspendCancellableCoroutine { continuation ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val cancellationSignal = CancellationSignal()
+            getCurrentLocation(
+                provider,
+                cancellationSignal,
+                ContextCompat.getMainExecutor(context)
+            ) { location ->
+                if (continuation.isActive) continuation.resume(location)
+            }
 
-                withContext(Dispatchers.Main) {
-                    if (response.isSuccessful && response.body() != null) {
-                        val serverResponse = response.body()!!
-                        if (serverResponse.status == "success") {
-                            Timber.i( "${serverResponse.message}\nLink: ${serverResponse.url}")
-                        } else {
-                            Timber.i( "Fehler: ${serverResponse.message}")
-                        }
-                    } else {
-                        Timber.i("Server-Fehler Code: ${response.code()}")
-                    }
+            continuation.invokeOnCancellation {
+                cancellationSignal.cancel()
+            }
+        } else {
+            val locationListener = object : LocationListener {
+                override fun onLocationChanged(location: Location) {
+                    removeUpdates(this)
+                    if (continuation.isActive) continuation.resume(location)
                 }
-                feedBack(response)
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    if (e is retrofit2.HttpException) {
-                        val errorBody = e.response()?.errorBody()?.string()
-                        Timber.e( "Roher Fehler-Text: $errorBody")
-                    }
-                    Timber.i( "Netzwerkfehler: ${e.localizedMessage}")
-                }
+                @Deprecated("Deprecated in Java")
+                override fun onStatusChanged(p: String?, s: Int, e: android.os.Bundle?) {}
+            }
+
+            requestLocationUpdates(provider, 0L, 0f, locationListener)
+
+            continuation.invokeOnCancellation {
+                removeUpdates(locationListener)
             }
         }
     }
-
 }

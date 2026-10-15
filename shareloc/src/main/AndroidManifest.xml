@@ -66,7 +66,12 @@
         <!-- Declare the service with the explicit camera type -->
         <service
             android:name="com.almica.shareloc.backgroundcamera.BackgroundCameraService"
-            android:foregroundServiceType="camera"
+            android:foregroundServiceType="camera|location"
             android:exported="false" />
+        <!-- Declare WorkManager Foreground Service with explicit camera type -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="camera|location"
+            tools:node="merge" />
     </application>
 </manifest>

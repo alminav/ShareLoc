@@ -112,43 +112,53 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             workRequest
         )
         prefs.resetSendLocationCount()
-//        if (prefs.isBackgroundCameraEnabled()) {
-//            startRepeatingCamera()
-//        }
+        if (prefs.isBackgroundCameraEnabled()) {
+            startRepeatingCamera()
+        }
     }
 
     fun stopWorker() {
         // Cancel by tag ensures all instances (unique or tagged) are stopped
         workManager.cancelAllWorkByTag(Constants.WORK_TAG)
-        //stopRepeatingCamera()
+        stopRepeatingCamera()
     }
 
-    fun updatePreferences(phone: String, interval: Long, email: String, backgroundCameraEnabled: Boolean) {
+    fun updatePreferences(
+        phone: String,
+        interval: Long,
+        email: String,
+        backgroundCameraEnabled: Boolean,
+        bgCameraInterval: Float
+    ) {
         val oldInterval = prefs.getIntervalMinutes()
         val oldBgCamEnabled = prefs.isBackgroundCameraEnabled()
+        val oldBgCamInterval = prefs.getBackgroundCameraIntervalMinutes()
+
         prefs.setPhoneNumber(phone)
         prefs.setIntervalMinutes(interval)
         prefs.setEmailAddress(email)
         prefs.setBackgroundCameraEnabled(backgroundCameraEnabled)
+        prefs.setBackgroundCameraIntervalMinutes(bgCameraInterval)
 
         // If worker is running and interval changed, restart it
         if (isWorkerRunning.value && oldInterval != interval) {
             startWorker()
         }
 
-//        if (isWorkerRunning.value) {
-//            if (backgroundCameraEnabled && !oldBgCamEnabled) {
-//                startRepeatingCamera()
-//            } else if (!backgroundCameraEnabled && oldBgCamEnabled) {
-//                stopRepeatingCamera()
-//            }
-//        }
+        if (backgroundCameraEnabled) {
+            if (!oldBgCamEnabled || oldBgCamInterval != bgCameraInterval) {
+                startRepeatingCamera()
+            }
+        } else if (oldBgCamEnabled) {
+            stopRepeatingCamera()
+        }
     }
 
     fun getPhoneNumber() = prefs.getPhoneNumber()
     fun getIntervalMinutes() = prefs.getIntervalMinutes()
     fun getEmailAddress() = prefs.getEmailAddress()
     fun isBackgroundCameraEnabled() = prefs.isBackgroundCameraEnabled()
+    fun getBackgroundCameraIntervalMinutes() = prefs.getBackgroundCameraIntervalMinutes()
 
     fun testWorkerImmediately() {
         val constraints = Constraints.Builder()
@@ -435,6 +445,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         networkMonitor.unregister()
-        //stopRepeatingCamera()
+        stopRepeatingCamera()
     }
 }
