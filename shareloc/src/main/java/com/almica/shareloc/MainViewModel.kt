@@ -44,6 +44,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val networkMonitor = NetworkMonitor(application)
     private val workManager = WorkManager.getInstance(application)
     private val prefs = PreferenceManager(application)
+
+    init {
+        if (prefs.isBackgroundCameraEnabled()) {
+            startRepeatingCamera()
+        }
+    }
+
     private var imageCapture: ImageCapture? = null
     val isShareLocActive: StateFlow<Boolean> = networkMonitor.isShareLocActive
     // Track work status more robustly by checking for any active work with the tag
@@ -130,7 +137,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         interval: Long,
         email: String,
         backgroundCameraEnabled: Boolean,
-        bgCameraInterval: Float
+        bgCameraInterval: Float,
+        backgroundCameraSoundEnabled: Boolean = true
     ) {
         val oldInterval = prefs.getIntervalMinutes()
         val oldBgCamEnabled = prefs.isBackgroundCameraEnabled()
@@ -141,6 +149,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.setEmailAddress(email)
         prefs.setBackgroundCameraEnabled(backgroundCameraEnabled)
         prefs.setBackgroundCameraIntervalMinutes(bgCameraInterval)
+        prefs.setBackgroundCameraSoundEnabled(backgroundCameraSoundEnabled)
 
         // If worker is running and interval changed, restart it
         if (isWorkerRunning.value && oldInterval != interval) {
@@ -161,6 +170,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun getEmailAddress() = prefs.getEmailAddress()
     fun isBackgroundCameraEnabled() = prefs.isBackgroundCameraEnabled()
     fun getBackgroundCameraIntervalMinutes() = prefs.getBackgroundCameraIntervalMinutes()
+    fun isBackgroundCameraSoundEnabled() = prefs.isBackgroundCameraSoundEnabled()
 
     fun testWorkerImmediately() {
         val constraints = Constraints.Builder()

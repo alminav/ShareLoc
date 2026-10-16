@@ -97,6 +97,14 @@ class PreferenceManager(context: Context) {
     fun setBackgroundCameraIntervalMinutes(minutes: Float) {
         prefs.edit { putFloat(Constants.KEY_BG_CAMERA_INTERVAL_MINS, minutes) }
     }
+
+    fun isBackgroundCameraSoundEnabled(): Boolean {
+        return prefs.getBoolean(Constants.KEY_BG_CAMERA_SOUND_ENABLED, true)
+    }
+
+    fun setBackgroundCameraSoundEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(Constants.KEY_BG_CAMERA_SOUND_ENABLED, enabled) }
+    }
 }
 
 fun getDeviceName(): String {

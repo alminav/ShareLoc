@@ -111,7 +111,7 @@ class SmsReceiver : BroadcastReceiver() {
             notificationManager.createNotificationChannel(channel)
         }
 
-        val webHomeIntentUri = "http://almica.bplaced.net/".toUri()
+        val webHomeIntentUri = "http://almica.bplaced.net/showImages.php".toUri()
         val webIntent = Intent(Intent.ACTION_VIEW, webHomeIntentUri).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }

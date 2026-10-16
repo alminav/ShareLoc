@@ -22,6 +22,7 @@
     <string name="email_label">Empfänger-E-Mail-Adresse</string>
     <string name="sms_interval_label">Intervall (Minuten)</string>
     <string name="enable_background_camera_label">Hintergrundkamera aktivieren</string>
+    <string name="enable_bg_camera_sound_label">Kamera-Auslöseton aktivieren</string>
     <string name="bg_camera_interval_label">Kamera-Intervall (Minuten, z.B. 0,25)</string>
     <string name="save">Speichern</string>
     <string name="send_sms_title">SMS senden</string>

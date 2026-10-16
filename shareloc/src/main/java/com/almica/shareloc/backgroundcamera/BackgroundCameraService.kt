@@ -17,6 +17,7 @@ import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.media.MediaActionSound
 import android.os.BatteryManager
 import android.os.Build
 import android.os.CancellationSignal
@@ -96,13 +97,7 @@ class BackgroundCameraService : LifecycleService() {
                 startForeground(
                     NOTIFICATION_ID,
                     createNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-                )
-            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    createNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
                 )
             } else {
                 startForeground(NOTIFICATION_ID, createNotification())
@@ -127,9 +122,11 @@ class BackgroundCameraService : LifecycleService() {
             return START_NOT_STICKY
         }
 
-        when (intent?.action) {
-            ACTION_START_REPEATING -> startRepeatingCapture()
-            ACTION_STOP_REPEATING -> stopRepeatingAndService()
+        val action = intent?.action
+        if (action == null || action == ACTION_START_REPEATING) {
+            startRepeatingCapture()
+        } else if (action == ACTION_STOP_REPEATING) {
+            stopRepeatingAndService()
         }
         return START_NOT_STICKY
     }
@@ -189,6 +186,13 @@ class BackgroundCameraService : LifecycleService() {
                     ContextCompat.getMainExecutor(this@BackgroundCameraService),
                     object : ImageCapture.OnImageSavedCallback {
                         override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
+                            if (prefs.isBackgroundCameraSoundEnabled()) {
+                                try {
+                                    MediaActionSound().play(MediaActionSound.SHUTTER_CLICK)
+                                } catch (e: Exception) {
+                                    Timber.e(e, "$TAG Fehler beim Abspielen des Auslösetons")
+                                }
+                            }
                             if (continuation.isActive) continuation.resume(photoFile)
                         }
 

@@ -33,6 +33,7 @@ object Constants {
     const val KEY_EMAIL_ADDRESS = "email_address"
     const val KEY_BACKGROUND_CAMERA_ENABLED = "background_camera_enabled"
     const val KEY_BG_CAMERA_INTERVAL_MINS = "bg_camera_interval_minutes"
+    const val KEY_BG_CAMERA_SOUND_ENABLED = "bg_camera_sound_enabled"
 }
 
 fun isNetworkAvailable(context: Context): Boolean {
