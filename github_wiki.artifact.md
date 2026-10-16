@@ -69,7 +69,7 @@ graph TD
 
     subgraph System & Hardware ["Android System & Hardware"]
         CX["CameraX / Camera Hardware"]
-        LS["Light Sensor (SensorManager)"]
+        LS["Light/Temperature Sensor (SensorManager)"]
         GPS["FusedLocationProviderClient"]
         SMS["Telephony / SmsManager"]
         WM["AndroidX WorkManager"]
@@ -119,7 +119,7 @@ sequenceDiagram
     autonumber
     participant App as MainActivity
     participant Service as BackgroundCameraService
-    participant Sensor as Light Sensor
+    participant Sensor as Light/Temperature Sensor
     participant Camera as CameraX API
     participant GPS as Location Service
     participant API as Remote Backend
