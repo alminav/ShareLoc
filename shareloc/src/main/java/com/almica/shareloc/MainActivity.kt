@@ -73,7 +73,6 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringArrayResource
-import com.almica.shareloc.backgroundcamera.BackgroundCameraService
 
 private fun launchMapIntent(context: Context, latitude: Double, longitude: Double) {
     val gmmIntentUri = "geo:$latitude,$longitude?q=$latitude,$longitude".toUri()
@@ -183,6 +182,7 @@ fun MainScreen(viewModel: MainViewModel) {
         permissions.add(Manifest.permission.READ_PHONE_STATE)
         permissions.add(Manifest.permission.SEND_SMS)
         permissions.add(Manifest.permission.RECEIVE_SMS)
+        permissions.add(Manifest.permission.CAMERA)
 
         // Foreground location permissions
         permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -359,6 +359,15 @@ fun MainScreen(viewModel: MainViewModel) {
             currentBackgroundCameraInterval = viewModel.getBackgroundCameraIntervalMinutes(),
             onDismiss = { showSettingsDialog = false },
             onSave = { phone, interval, email, backgroundCameraEnabled, bgCameraInterval ->
+                if (backgroundCameraEnabled) {
+                    val hasCameraPermission = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.CAMERA
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (!hasCameraPermission) {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
+                }
                 viewModel.updatePreferences(phone, interval, email, backgroundCameraEnabled, bgCameraInterval)
                 showSettingsDialog = false
             }

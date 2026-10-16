@@ -73,24 +73,24 @@ class ShareLocWorker(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
-                "ShareLoc Background Camera",
+                "ShareLoc Background Worker",
                 NotificationManager.IMPORTANCE_LOW
             )
             notificationManager.createNotificationChannel(channel)
         }
 
         val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle("ShareLoc Background Camera")
-            .setContentText("Kamera-Aufnahme wird durchgeführt...")
-            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setContentTitle("ShareLoc Background Worker")
+            .setContentText("Standortbestimmung wird durchgeführt...")
+            .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(
                 NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             )
         } else {
             ForegroundInfo(NOTIFICATION_ID, notification)

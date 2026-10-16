@@ -1,5 +1,6 @@
 package com.almica.shareloc.backgroundcamera
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
@@ -7,6 +8,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -64,19 +66,67 @@ class BackgroundCameraService : LifecycleService() {
 
     override fun onCreate() {
         super.onCreate()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            startForeground(
-                NOTIFICATION_ID,
-                createNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, createNotification())
+
+        val hasCameraPermission = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasCameraPermission) {
+            Timber.e("$TAG CAMERA permission is missing. Cannot start BackgroundCameraService.")
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        createNotification(),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    )
+                } else {
+                    startForeground(NOTIFICATION_ID, createNotification())
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "$TAG Failed fallback startForeground")
+            }
+            stopSelf()
+            return
+        }
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    createNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    createNotification(),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, createNotification())
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "$TAG Exception during startForeground")
+            stopSelf()
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+
+        val hasCameraPermission = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasCameraPermission) {
+            Timber.e("$TAG CAMERA permission not granted in onStartCommand. Stopping service.")
+            stopRepeatingAndService()
+            return START_NOT_STICKY
+        }
+
         when (intent?.action) {
             ACTION_START_REPEATING -> startRepeatingCapture()
             ACTION_STOP_REPEATING -> stopRepeatingAndService()

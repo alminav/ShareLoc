@@ -1,9 +1,11 @@
 package com.almica.shareloc
 
+import android.Manifest
 import android.app.Application
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.location.Location
 import android.net.Uri
@@ -430,10 +432,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun startRepeatingCamera() {
         val context = getApplication<Application>()
+        val hasCameraPermission = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasCameraPermission) {
+            Timber.w("Cannot start BackgroundCameraService: CAMERA permission is not granted.")
+            return
+        }
+
         val intent = Intent(context, BackgroundCameraService::class.java).apply {
             action = BackgroundCameraService.ACTION_START_REPEATING
         }
-        ContextCompat.startForegroundService(context, intent)
+        try {
+            ContextCompat.startForegroundService(context, intent)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to start BackgroundCameraService foreground service")
+        }
     }
     fun stopRepeatingCamera() {
         val context = getApplication<Application>()
