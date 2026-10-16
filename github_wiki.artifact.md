@@ -69,7 +69,7 @@ graph TD
 
     subgraph System & Hardware ["Android System & Hardware"]
         CX["CameraX / Camera Hardware"]
-        LS["Light Sensor (SensorManager)"]
+        LS["Light/Temperature Sensor (SensorManager)"]
         GPS["FusedLocationProviderClient"]
         SMS["Telephony / SmsManager"]
         WM["AndroidX WorkManager"]
