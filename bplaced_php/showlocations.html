@@ -176,6 +176,7 @@
                         <th>Breitengrad Längengrad</th>
                         <th>Bild (Vorschau)</th>
                         <th>Zeitstempel</th>
+						<th>Temperatur</th>
                     </tr>
                 </thead>
                 <tbody id="locationTableBody">
@@ -219,6 +220,7 @@
 							const lon = parseFloat(loc.longitude).toFixed(7);
 							const date = loc.created_at;
 							const imageUrl = loc.image_url;
+							const temperature = parseFloat(loc.temperature).toFixed(1);
 
 							// 1. Bild-Zelle vorbereiten
 							let imageCell = '<span style="color: #bbb;">—</span>';
@@ -249,6 +251,7 @@
 								</td>
 								<td>${imageCell}</td>
 								<td style="color: #666;">${date}</td>
+								<td><strong>${temperature}°C</strong></td>
 						                                <!-- Der neue Löschen-Button -->
                                 <td>
                                     <button class="delete-btn" onclick="deleteLocation(${id}, '${title}')">🗑️ Löschen</button>
