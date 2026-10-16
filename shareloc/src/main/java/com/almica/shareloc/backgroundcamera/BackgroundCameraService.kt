@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -14,6 +15,7 @@ import android.hardware.SensorManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.CancellationSignal
 import androidx.camera.core.CameraSelector
@@ -27,6 +29,8 @@ import androidx.lifecycle.lifecycleScope
 import com.almica.shareloc.NetworkClient
 import com.almica.shareloc.PreferenceManager
 import com.almica.shareloc.compressImageFile
+import com.almica.shareloc.getDeviceName
+import com.almica.shareloc.sendLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -175,6 +179,7 @@ class BackgroundCameraService : LifecycleService() {
     private suspend fun uploadImage(imageFile: File) {
         withContext(Dispatchers.IO) {
             try {
+                val temperature = getBatteryTemperature(applicationContext)
                 val currentLocation = locationManager.awaitCurrentLocation(applicationContext)
                 Timber.i("$TAG Upload Location: $currentLocation")
 
@@ -186,7 +191,15 @@ class BackgroundCameraService : LifecycleService() {
                 val response = NetworkClient.bplacedApiService.uploadLocationWithPhoto(titleRequestBody, body)
                 if (response.isSuccessful && response.body() != null) {
                     val serverResponse = response.body()!!
-                    Timber.i("$TAG Upload erfolgreich: ${serverResponse.message}")
+                    Timber.i("$TAG Upload erfolgreich: ${serverResponse.message} ${serverResponse.url}")
+                    val lat = currentLocation?.latitude ?: 0.0
+                    val lon = currentLocation?.longitude ?: 0.0
+                    val alt = currentLocation?.altitude ?: 0.0
+                    val deviceName = getDeviceName()
+                    serverResponse.url?.let {
+                        sendLocation(deviceName, it,
+                            lat, lon, altitude = alt, temperature = temperature)
+                    }
                 } else {
                     Timber.w("$TAG Server-Fehler Code: ${response.code()}")
                 }
@@ -239,6 +252,15 @@ class BackgroundCameraService : LifecycleService() {
         }
 
         measuredLux ?: 999f
+    }
+
+    fun getBatteryTemperature(context: Context): Float {
+        val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val temp = intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
+        // Temperature is in tenths of a degree Celsius (e.g., 305 for 30.5°C)
+        val celsius = temp / 10f
+        Timber.i("Battery Temperature: $celsius°C")
+        return celsius
     }
 
     private fun createNotification(): Notification {

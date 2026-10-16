@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.net.toUri
 import timber.log.Timber
 
 class SmsReceiver : BroadcastReceiver() {
@@ -110,14 +111,18 @@ class SmsReceiver : BroadcastReceiver() {
             notificationManager.createNotificationChannel(channel)
         }
 
-        val activityIntent = Intent(context, MainActivity::class.java).apply {
+        val webHomeIntentUri = "http://almica.bplaced.net/".toUri()
+        val webIntent = Intent(Intent.ACTION_VIEW, webHomeIntentUri).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
+//        val activityIntent = Intent(context, MainActivity::class.java).apply {
+//            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+//        }
 
         val pendingIntent = PendingIntent.getActivity(
             context,
             0,
-            activityIntent,
+            webIntent, //activityIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
