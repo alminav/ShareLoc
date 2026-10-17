@@ -24,6 +24,10 @@
     <string name="enable_background_camera_label">Enable background camera</string>
     <string name="enable_bg_camera_sound_label">Enable camera shutter sound</string>
     <string name="bg_camera_interval_label">Camera interval (minutes, e.g. 0.25)</string>
+    <string name="battery_optimization_title">Battery Optimization</string>
+    <string name="battery_optimization_disabled">Status: Unrestricted (Optimized for background work)</string>
+    <string name="battery_optimization_enabled">Status: Optimized (May restrict background work in Doze mode)</string>
+    <string name="disable_battery_optimization">Disable Battery Optimization</string>
     <string name="save">Save</string>
     <string name="send_sms_title">Send SMS</string>
     <string name="sms_recipient_label">Recipient phone number</string>

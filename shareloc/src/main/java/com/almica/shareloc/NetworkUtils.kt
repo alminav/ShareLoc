@@ -10,6 +10,9 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.BatteryManager
+import android.os.PowerManager
+import android.provider.Settings
+import androidx.core.net.toUri
 import android.telephony.TelephonyManager
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -42,6 +45,25 @@ fun isNetworkAvailable(context: Context): Boolean {
     val activeNetwork = connectivityManager.activeNetwork ?: return false
     val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
     return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}
+
+fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+    val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return true
+    return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+}
+
+fun requestDisableBatteryOptimization(context: Context) {
+    if (!isIgnoringBatteryOptimizations(context)) {
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = "package:${context.packageName}".toUri()
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Timber.e(e, "Error requesting ignore battery optimization")
+        }
+    }
 }
 
 fun isShareLocEnabled(context: Context): Pair<Boolean, Float> {

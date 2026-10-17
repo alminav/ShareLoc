@@ -569,6 +569,42 @@ fun SettingsDialog(
                         singleLine = true
                     )
                 }
+
+                val context = LocalContext.current
+                var isIgnoringBattery by remember {
+                    mutableStateOf(isIgnoringBatteryOptimizations(context))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = stringResource(R.string.battery_optimization_title),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (isIgnoringBattery) {
+                        stringResource(R.string.battery_optimization_disabled)
+                    } else {
+                        stringResource(R.string.battery_optimization_enabled)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isIgnoringBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
+                if (!isIgnoringBattery) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            requestDisableBatteryOptimization(context)
+                            isIgnoringBattery = isIgnoringBatteryOptimizations(context)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.disable_battery_optimization))
+                    }
+                }
             }
         },
         confirmButton = {

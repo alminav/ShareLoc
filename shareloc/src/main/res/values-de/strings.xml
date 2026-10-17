@@ -24,6 +24,10 @@
     <string name="enable_background_camera_label">Hintergrundkamera aktivieren</string>
     <string name="enable_bg_camera_sound_label">Kamera-Auslöseton aktivieren</string>
     <string name="bg_camera_interval_label">Kamera-Intervall (Minuten, z.B. 0,25)</string>
+    <string name="battery_optimization_title">Akku-Optimierung</string>
+    <string name="battery_optimization_disabled">Status: Uneingeschränkt (Optimiert für Hintergrundarbeit)</string>
+    <string name="battery_optimization_enabled">Status: Optimiert (Kann Hintergrundarbeit im Ruhezustand einschränken)</string>
+    <string name="disable_battery_optimization">Akku-Optimierung deaktivieren</string>
     <string name="save">Speichern</string>
     <string name="send_sms_title">SMS senden</string>
     <string name="sms_recipient_label">Empfänger-Telefonnummer</string>
