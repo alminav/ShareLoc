@@ -148,7 +148,9 @@ class BackgroundCameraService : LifecycleService() {
                 }
 
                 // Wait for next interval
+                Timber.i("$TAG Warte $captureIntervalMs ms...")
                 delay(captureIntervalMs.milliseconds)
+                Timber.i("$TAG Warte vorbei.")
             }
         }
     }
