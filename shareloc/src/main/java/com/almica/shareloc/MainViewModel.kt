@@ -44,13 +44,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val networkMonitor = NetworkMonitor(application)
     private val workManager = WorkManager.getInstance(application)
     private val prefs = PreferenceManager(application)
-
+/*
     init {
         if (prefs.isBackgroundCameraEnabled()) {
             startRepeatingCamera()
         }
     }
-
+*/
     private var imageCapture: ImageCapture? = null
     val isShareLocActive: StateFlow<Boolean> = networkMonitor.isShareLocActive
     // Track work status more robustly by checking for any active work with the tag
@@ -101,6 +101,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = prefs.getSendLocationCount()
         )
 
+    val serviceRestartCount: StateFlow<Int> = workManager
+        .getWorkInfosByTagFlow(Constants.WORK_TAG)
+        .map {
+            prefs.getServiceRestartCount()
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = prefs.getSendLocationCount()
+        )
+
     fun startWorker() {
         val interval = prefs.getIntervalMinutes()
         val constraints = Constraints.Builder()
@@ -121,6 +132,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             workRequest
         )
         prefs.resetSendLocationCount()
+        prefs.resetServiceRestartCount()
+
         if (prefs.isBackgroundCameraEnabled()) {
             startRepeatingCamera()
         }

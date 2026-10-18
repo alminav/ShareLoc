@@ -102,13 +102,13 @@ class ShareLocWorker(
 
     @RequiresApi(Build.VERSION_CODES.O)
     override suspend fun doWork(): Result {
-        val (isEnabled, temp) = isShareLocEnabled(applicationContext)
+        val (isEnabled, temp, level) = isShareLocEnabled(applicationContext)
         val prefs = PreferenceManager(applicationContext)
 
         if (isEnabled && prefs.getNetworkStateNotificationsEnabled()) {
             sendShareLocNotification(applicationContext)
         }
-        Timber.i("Mobile Data Check Worker executed, temperature: $temp°C")
+        Timber.i("Mobile Data Check Worker executed, temperature: $temp°C", "level: $level%")
 
         if (!isNetworkAvailable(applicationContext)) {
             Timber.w("No network connection available. Retrying ShareLocWorker.")
@@ -144,6 +144,7 @@ class ShareLocWorker(
                         action = BackgroundCameraService.ACTION_START_REPEATING
                     }
                     ContextCompat.startForegroundService(applicationContext, intent)
+                    prefs.incrementServiceRestartCount()
                     Timber.i("ShareLocWorker Watchdog: Restarted BackgroundCameraService")
                 } catch (e: Exception) {
                     Timber.e(e, "ShareLocWorker Watchdog: Could not start BackgroundCameraService")
@@ -159,7 +160,7 @@ class ShareLocWorker(
             val alt = location?.altitude ?: 0.0
             val deviceName = getDeviceName()
 
-            val isLocationSent = sendLocation(deviceName, imageUrl, lat, lon, altitude = alt, temperature = temp)
+            val isLocationSent = sendLocation(deviceName, imageUrl, lat, lon, altitude = alt, temperature = temp, level = level)
             if (isLocationSent) {
                 prefs.incrementSendLocationCount()
                 Timber.i("sendLocation completed successfully")

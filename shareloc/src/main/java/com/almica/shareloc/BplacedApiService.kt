@@ -27,6 +27,7 @@ interface BplacedApiService {
         @Field("longitude") longitude: Double,
         @Field("altitude") altitude: Double,
         @Field("temperature") temperature: Float?,
+        @Field("battery_level") level: Int?,
     ): Response<ApiResponse>
 
     // Neue Methode zum Abrufen der Standorte

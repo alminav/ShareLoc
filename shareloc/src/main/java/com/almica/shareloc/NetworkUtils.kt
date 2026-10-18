@@ -30,6 +30,7 @@ object Constants {
     const val KEY_INTERVAL_MINS = "interval_minutes"
     const val KEY_INSTALLATION_ID = "installation_id"
     const val KEY_SEND_LOCATION_COUNT = "send_location_count"
+    const val KEY_SERVICE_RESTART_COUNT = "service_restart_count"
     const val KEY_NETSTATE_NOTIFICATIONS_ENABLED = "notifications_enabled"
     const val KEY_SMS_FILTER_ENABLED = "sms_filter_enabled"
     const val KEY_IMAGE_URL = "image_url"
@@ -49,32 +50,58 @@ fun isNetworkAvailable(context: Context): Boolean {
 
 fun isIgnoringBatteryOptimizations(context: Context): Boolean {
     val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return true
-    return powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    val isIgnoringBatteryOptimizations = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+    Timber.i("isIgnoringBatteryOptimizations: $isIgnoringBatteryOptimizations")
+    return isIgnoringBatteryOptimizations
 }
 
 fun requestDisableBatteryOptimization(context: Context) {
-    if (!isIgnoringBatteryOptimizations(context)) {
+    // Play-Store-konform ist Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+    // manifest definition kann gelöscht werden
+    Timber.i("requestDisableBatteryOptimization")
+    try {
+        // NICHT Play-Store-konform
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = "package:${context.packageName}".toUri()
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Timber.e(e, "Error requesting ignore battery optimization")
+    }
+}
+
+fun requestEnableBatteryOptimization(context: Context) {
+    Timber.i("requestEnableBatteryOptimization")
+    try {
+        val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Timber.e(e, "Error opening battery optimization settings")
         try {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                 data = "package:${context.packageName}".toUri()
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-        } catch (e: Exception) {
-            Timber.e(e, "Error requesting ignore battery optimization")
+        } catch (e2: Exception) {
+            Timber.e(e2, "Error opening app details settings")
         }
     }
 }
 
-fun isShareLocEnabled(context: Context): Pair<Boolean, Float> {
+fun isShareLocEnabled(context: Context): Triple<Boolean, Float, Int> {
     val temp = getBatteryTemperature(context)
-    Timber.i("Checking data status at battery temperature: $temp°C")
+    val level = getBatteryLevel(context)
+    Timber.i("Checking data status at battery temperature: $temp°C and level: $level%")
 
     // Check if permission is granted at runtime before accessing TelephonyManager
     if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE)
         != PackageManager.PERMISSION_GRANTED) {
         Timber.w("READ_PHONE_STATE permission not granted")
-        return Pair(false, temp)
+        return Triple(false, temp, level)
     }
 
     val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
@@ -89,7 +116,7 @@ fun isShareLocEnabled(context: Context): Pair<Boolean, Float> {
         mobileDataMethod.isAccessible = true
         mobileDataMethod.invoke(connectivityManager) as Boolean
     }
-    return Pair(isEnabled, temp)
+    return Triple(isEnabled, temp, level)
 }
 
 fun getBatteryTemperature(context: Context): Float {
@@ -99,6 +126,12 @@ fun getBatteryTemperature(context: Context): Float {
     val celsius = temp / 10f
     Timber.i("Battery Temperature: $celsius°C")
     return celsius
+}
+fun getBatteryLevel(context: Context): Int {
+    val intent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+    val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, 0) ?: 0
+    Timber.i("Battery level: ${level}%")
+    return level
 }
 
 fun sendShareLocNotification(context: Context) {
@@ -134,7 +167,8 @@ suspend fun sendLocation(
     latitude: Double,
     longitude: Double,
     altitude: Double = 0.0,
-    temperature: Float? = null
+    temperature: Float? = null,
+    level: Int? = null
 ): Boolean {
     return try {
         Timber.i( "sendLocation $title $temperature°C")
@@ -144,7 +178,8 @@ suspend fun sendLocation(
             latitude = latitude,
             longitude = longitude,
             altitude = altitude,
-            temperature = temperature
+            temperature = temperature,
+            level = level
         )
         val body = response.body()
         if (response.isSuccessful && (body?.status == "success")) {

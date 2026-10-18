@@ -120,6 +120,7 @@ fun MainScreen(viewModel: MainViewModel) {
     val isWorkerRunning by viewModel.isWorkerRunning.collectAsStateWithLifecycle(initialValue = false)
     val workerLastRunTime by viewModel.workerLastRunTime.collectAsStateWithLifecycle(initialValue = 0L)
     val sendLocationCount by viewModel.sendLocationCount.collectAsStateWithLifecycle(initialValue = 0)
+    val serviceRestartCount by viewModel.serviceRestartCount.collectAsStateWithLifecycle(initialValue = 0)
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle(initialValue = true)
 
     var lastStatusChangeTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
@@ -159,13 +160,14 @@ fun MainScreen(viewModel: MainViewModel) {
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         hasRequiredPermissions = results.values.all { it }
-
+/*
         val cameraGranted = results[Manifest.permission.CAMERA] == true ||
                 ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
         if (cameraGranted && viewModel.isBackgroundCameraEnabled()) {
             viewModel.startRepeatingCamera()
         }
-
+*/
         val foregroundLocationGranted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
@@ -264,6 +266,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 isWorkerRunning = isWorkerRunning,
                 workerInterval = viewModel.getIntervalMinutes(),
                 sendLocationCount = sendLocationCount,
+                serviceRestartCount = serviceRestartCount,
                 notificationsEnabled = notificationsEnabled,
                 lastStatusChangeTime = lastStatusChangeTime,
                 onNotificationsChanged = { viewModel.setNotificationsEnabled(it) },
@@ -593,17 +596,27 @@ fun SettingsDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isIgnoringBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                 )
-                if (!isIgnoringBattery) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        if (isIgnoringBattery) {
+                            requestEnableBatteryOptimization(context)
+                        } else {
                             requestDisableBatteryOptimization(context)
-                            isIgnoringBattery = isIgnoringBatteryOptimizations(context)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(stringResource(R.string.disable_battery_optimization))
-                    }
+                        }
+                        onDismiss()
+                        isIgnoringBattery = isIgnoringBatteryOptimizations(context)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (isIgnoringBattery) {
+                            stringResource(R.string.enable_battery_optimization)
+                    } else {
+                            stringResource(R.string.disable_battery_optimization)
+                    },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (isIgnoringBattery) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                 }
             }
         },
@@ -1063,7 +1076,8 @@ fun WorkerControlCard(
     containerColor: Color = CardDefaults.cardColors().containerColor,
     contentColor: Color = CardDefaults.cardColors().contentColor,
     onSendLocationNow: () -> Unit,
-    onDeleteOldRecords: (Int) -> Unit
+    onDeleteOldRecords: (Int) -> Unit,
+    serviceRestartCount: Int
 ) {
     var selectedLimit by remember { mutableStateOf<Int?>(5) }
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -1084,11 +1098,19 @@ fun WorkerControlCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(
-                text = stringResource(R.string.locations_sent_count, sendLocationCount),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
+            Row {
+                Text(
+                    text = stringResource(R.string.locations_sent_count, sendLocationCount),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.width(20.dp))
+                Text(
+                    text = stringResource(R.string.service_restart_count, serviceRestartCount),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             // Start Job Button
             OutlinedButton(
                 onClick = onStartWorker,
@@ -1337,7 +1359,8 @@ fun MainScreenContent(
     onFetchLocations: (Int?) -> Unit,
     onSendSmsNow: () -> Unit,
     onDeleteOldRecords: (Int) -> Unit,
-    onTakePicture: () -> Unit
+    onTakePicture: () -> Unit,
+    serviceRestartCount: Int
 ) {
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
     val deviceName = getDeviceName()
@@ -1407,6 +1430,7 @@ fun MainScreenContent(
                         isWorkerRunning = isWorkerRunning,
                         workerInterval = workerInterval,
                         sendLocationCount = sendLocationCount,
+                        serviceRestartCount = serviceRestartCount,
                         onStartWorker = onStartWorker,
                         onStopWorker = onStopWorker,
                         onFetchLocations = onFetchLocations,
@@ -1450,6 +1474,7 @@ fun MainScreenActivePreview() {
                 isWorkerRunning = false,
                 workerInterval = 15L,
                 sendLocationCount = 3,
+                serviceRestartCount = 0,
                 notificationsEnabled = true,
                 lastStatusChangeTime = System.currentTimeMillis(),
                 onNotificationsChanged = {},
@@ -1457,10 +1482,10 @@ fun MainScreenActivePreview() {
                 onStartWorker = {},
                 onStopWorker = {},
                 onSendLocationNow = {},
-                onDeleteOldRecords = {},
                 onFetchLocations = {},
                 onSendSmsNow = {},
-                onTakePicture = {}
+                onDeleteOldRecords = {},
+                onTakePicture = {},
             )
         }
     }
@@ -1479,6 +1504,7 @@ fun MainScreenInactivePreview() {
                 isWorkerRunning = true,
                 workerInterval = 15L,
                 sendLocationCount = 5,
+                serviceRestartCount = 0,
                 notificationsEnabled = false,
                 lastStatusChangeTime = System.currentTimeMillis(),
                 onNotificationsChanged = {},
@@ -1487,9 +1513,9 @@ fun MainScreenInactivePreview() {
                 onStopWorker = {},
                 onSendLocationNow = {},
                 onFetchLocations = {},
-                onDeleteOldRecords = {},
                 onSendSmsNow = {},
-                onTakePicture = {}
+                onDeleteOldRecords = {},
+                onTakePicture = {},
             )
         }
     }

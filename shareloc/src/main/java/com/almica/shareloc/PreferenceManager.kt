@@ -66,6 +66,18 @@ class PreferenceManager(context: Context) {
         prefs.edit { putInt(Constants.KEY_SEND_LOCATION_COUNT, 0) }
     }
 
+    fun getServiceRestartCount(): Int {
+        return prefs.getInt(Constants.KEY_SERVICE_RESTART_COUNT, 0)
+    }
+    fun incrementServiceRestartCount(): Int {
+        val current = getServiceRestartCount() + 1
+        prefs.edit { putInt(Constants.KEY_SERVICE_RESTART_COUNT, current) }
+        return current
+    }
+    fun resetServiceRestartCount() {
+        prefs.edit { putInt(Constants.KEY_SERVICE_RESTART_COUNT, 0) }
+    }
+
     fun getNetworkStateNotificationsEnabled(): Boolean {
         return prefs.getBoolean(Constants.KEY_NETSTATE_NOTIFICATIONS_ENABLED, true)
     }

@@ -28,6 +28,7 @@
     <string name="battery_optimization_disabled">Status: Unrestricted (Optimized for background work)</string>
     <string name="battery_optimization_enabled">Status: Optimized (May restrict background work in Doze mode)</string>
     <string name="disable_battery_optimization">Disable Battery Optimization</string>
+    <string name="enable_battery_optimization">Enable Battery Optimization</string>
     <string name="save">Save</string>
     <string name="send_sms_title">Send SMS</string>
     <string name="sms_recipient_label">Recipient phone number</string>
@@ -59,6 +60,7 @@
     <string name="camera_loading">Loading camera …</string>
     <string name="contact">✋ Contact</string>
     <string name="telephone_call">Phone call (%1$s)</string>
+    <string name="service_restart_count">Service Restarts: %1$d</string>
     <string-array name="sms_messages">
         <item>👌 OK</item>
         <item>🚗 I\'m leaving now</item>

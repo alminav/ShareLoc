@@ -32,6 +32,7 @@ import androidx.lifecycle.lifecycleScope
 import com.almica.shareloc.NetworkClient
 import com.almica.shareloc.PreferenceManager
 import com.almica.shareloc.compressImageFile
+import com.almica.shareloc.getBatteryLevel
 import com.almica.shareloc.getDeviceName
 import com.almica.shareloc.sendLocation
 import kotlinx.coroutines.Dispatchers
@@ -236,6 +237,9 @@ class BackgroundCameraService : LifecycleService() {
         withContext(Dispatchers.IO) {
             try {
                 val temperature = getBatteryTemperature(applicationContext)
+                val level = getBatteryLevel(applicationContext)
+                Timber.i("$TAG battery temperature: $temperature°C and level: $level%")
+
                 val currentLocation = locationManager.awaitCurrentLocation(applicationContext)
                 Timber.i("$TAG Upload Location: $currentLocation")
 
@@ -254,7 +258,7 @@ class BackgroundCameraService : LifecycleService() {
                     val deviceName = getDeviceName()
                     serverResponse.url?.let {
                         sendLocation(deviceName, it,
-                            lat, lon, altitude = alt, temperature = temperature)
+                            lat, lon, altitude = alt, temperature = temperature, level = level)
                     }
                 } else {
                     Timber.w("$TAG Server-Fehler Code: ${response.code()}")
