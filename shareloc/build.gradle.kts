@@ -69,5 +69,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.play.services.auth) // Oder aktuellste Version
+    // Jetpack DataStore Preferences
+    implementation(libs.androidx.datastore.preferences)
 
+    // Kotlinx Serialization für die Umwandlung der Liste in einen String
+    implementation(libs.kotlinx.serialization.json)
 }

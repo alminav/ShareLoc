@@ -63,6 +63,7 @@
     <string name="service_restart_count">Service Restarts: %1$d</string>
     <string name="turn_on_location_sharing">Turn on</string>
     <string name="turn_off_location_sharing">Turn off</string>
+    <string name="phone_list">📞 Partner Telefon Liste</string>
     <string-array name="sms_messages">
         <item>👌 OK</item>
         <item>🚗 Ich fahr jetzt los</item>

@@ -68,6 +68,7 @@ import kotlinx.coroutines.withContext
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.result.IntentSenderRequest
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Language
 import java.text.SimpleDateFormat
@@ -276,6 +277,7 @@ fun MainScreen(viewModel: MainViewModel) {
 
     var lastStatusChangeTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showPhoneListDialog by remember { mutableStateOf(false) }
 
     val locationList by viewModel.locationList.collectAsStateWithLifecycle()
     var showLocationDialog by remember { mutableStateOf(Pair(false, false)) }
@@ -416,6 +418,7 @@ fun MainScreen(viewModel: MainViewModel) {
         Box(modifier = Modifier.padding(paddingValues)) {
             MainScreenContent(
                 viewModel.getDeviceName(),
+                viewModel.getPartnerPhoneNumber(),
                 isShareLocActive = isShareLocActive,
                 isWorkerRunning = isWorkerRunning,
                 workerInterval = viewModel.getIntervalMinutes(),
@@ -515,8 +518,8 @@ fun MainScreen(viewModel: MainViewModel) {
     }
     if (showSettingsDialog) {
         SettingsDialog(
-            currentPartnerPhoneNumber = viewModel.getPartnerPhoneNumber(),
             currentPhoneNumber = viewModel.getPhoneNumber(),
+            currentPartnerPhoneNumber = viewModel.getPartnerPhoneNumber(),
             currentInterval = viewModel.getIntervalMinutes(),
             currentEmail = viewModel.getEmailAddress(),
             currentBackgroundCameraEnabled = viewModel.isBackgroundCameraEnabled(),
@@ -524,21 +527,45 @@ fun MainScreen(viewModel: MainViewModel) {
             currentBackgroundCameraSoundEnabled = viewModel.isBackgroundCameraSoundEnabled(),
             onDismiss = { showSettingsDialog = false },
             onSave = { phone, partnerPhone, interval, email, backgroundCameraEnabled, bgCameraInterval, bgCameraSoundEnabled ->
-                if (backgroundCameraEnabled) {
-                    val hasCameraPermission = ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.CAMERA
-                    ) == PackageManager.PERMISSION_GRANTED
-                    if (!hasCameraPermission) {
-                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    if (backgroundCameraEnabled) {
+                        val hasCameraPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.CAMERA
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (!hasCameraPermission) {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
                     }
-                }
-                viewModel.updatePreferences(phone, partnerPhone, interval, email, backgroundCameraEnabled, bgCameraInterval, bgCameraSoundEnabled)
+                    viewModel.updatePreferences(
+                        phone,
+                        partnerPhone,
+                        interval,
+                        email,
+                        backgroundCameraEnabled,
+                        bgCameraInterval,
+                        bgCameraSoundEnabled
+                    )
+                    showSettingsDialog = false
+                },
+            onPhoneList = {
+                showPhoneListDialog = true
                 showSettingsDialog = false
-            }
-        )
+        })
     }
 
+    if (showPhoneListDialog) {
+        PhonePreferencesScreen(
+            onNavigateBack = { showPhoneListDialog = false },
+            onNumberSelected = { partnerNumber ->
+                Timber.i("Selected number: $partnerNumber")
+                viewModel.updatePartnerPhoneNumber(
+                    partnerPhone = partnerNumber
+                )
+                showPhoneListDialog = false
+            },
+            onBack = { showPhoneListDialog = false }
+        )
+    }
     if (showLocationDialog.first) {
         LocationListDialog(
             deviceName = viewModel.getDeviceName(),
@@ -642,8 +669,11 @@ fun SettingsDialog(
     currentBackgroundCameraInterval: Float,
     currentBackgroundCameraSoundEnabled: Boolean,
     onDismiss: () -> Unit,
-    onSave: (phone: String, partnerPhone: String,
-             interval: Long, email: String, backgroundCameraEnabled: Boolean, bgCameraInterval: Float, bgCameraSoundEnabled: Boolean) -> Unit
+    onSave: (
+        phone: String, partnerPhone: String,
+        interval: Long, email: String, backgroundCameraEnabled: Boolean, bgCameraInterval: Float, bgCameraSoundEnabled: Boolean
+    ) -> Unit,
+    onPhoneList: () -> Unit
 ) {
     var partnerPhoneNumber by remember { mutableStateOf(currentPartnerPhoneNumber) }
     var phoneNumber by remember { mutableStateOf(currentPhoneNumber) }
@@ -668,13 +698,29 @@ fun SettingsDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = partnerPhoneNumber,
-                    onValueChange = { partnerPhoneNumber = it },
-                    label = { Text(stringResource(R.string.sms_partner_phone_label)) },
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-                )
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                    colors = CardDefaults.cardColors(
+                        containerColor = CardDefaults.cardColors().containerColor,
+                        contentColor = CardDefaults.cardColors().contentColor)
+                    ) {
+                    TextField(
+                        enabled = false,
+                        value = partnerPhoneNumber,
+                        onValueChange = { partnerPhoneNumber = it },
+                        label = { Text(stringResource(R.string.sms_partner_phone_label)) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    TextButton(onClick = {
+                        onPhoneList()
+                    }) { Text(stringResource(R.string.phone_list)) }
+                }
                 Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = email,
@@ -1102,7 +1148,11 @@ fun LocationListDialog(
                                     if (!image_location.image_url.isNullOrBlank()) {
                                         selectedImageLocation = image_location
                                     } else {
-                                        launchMapIntent(context, location.latitude, location.longitude)
+                                        launchMapIntent(
+                                            context,
+                                            location.latitude,
+                                            location.longitude
+                                        )
                                     }
                                     searchQuery = location.title.orEmpty()
                                 }
@@ -1156,7 +1206,7 @@ fun LocationListDialog(
 }
 
 @Composable
-fun ContactControlCard(
+fun ContactControlCard(partnerPhoneNumber: String,
     modifier: Modifier = Modifier,
     containerColor: Color = CardDefaults.cardColors().containerColor,
     contentColor: Color = CardDefaults.cardColors().contentColor,
@@ -1164,8 +1214,6 @@ fun ContactControlCard(
     onTakePicture: () -> Unit
 ) {
     val context = LocalContext.current
-    val prefs = PreferenceManager(context)
-    val partnerPhoneNumber = remember { prefs.getPartnerPhoneNumber() }
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -1398,7 +1446,9 @@ fun WorkerControlCard(
             ) {
                 OutlinedButton(
                     onClick = { onDeleteOldRecords(selectedDays) },
-                    modifier = Modifier.height(50.dp).weight(1f)
+                    modifier = Modifier
+                        .height(50.dp)
+                        .weight(1f)
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1513,6 +1563,7 @@ fun StatusCard(
 @Composable
 fun MainScreenContent(
     deviceName: String,
+    partnerPhoneNumber: String,
     isShareLocActive: Boolean,
     isWorkerRunning: Boolean,
     workerInterval: Long,
@@ -1587,7 +1638,7 @@ fun MainScreenContent(
         ) { page ->
             when (page) {
                 0 -> {
-                    ContactControlCard(
+                    ContactControlCard(partnerPhoneNumber = partnerPhoneNumber,
                         onSendSmsNow = onSendSmsNow,
                         onTakePicture = onTakePicture
                     )
@@ -1638,6 +1689,7 @@ fun MainScreenActivePreview() {
         ) {
             MainScreenContent(
                 deviceName = "0123456789",
+                partnerPhoneNumber = "01111111",
                 isShareLocActive = true,
                 isWorkerRunning = false,
                 workerInterval = 15L,
@@ -1669,6 +1721,7 @@ fun MainScreenInactivePreview() {
         ) {
             MainScreenContent(
                 deviceName = "0123456789",
+                partnerPhoneNumber = "01111111",
                 isShareLocActive = false,
                 isWorkerRunning = true,
                 workerInterval = 15L,

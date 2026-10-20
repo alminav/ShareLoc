@@ -482,4 +482,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         networkMonitor.unregister()
         stopRepeatingCamera()
     }
+
+    fun updatePartnerPhoneNumber(partnerPhone: String) {
+        prefs.setPartnerPhoneNumber(partnerPhone)
+    }
 }
