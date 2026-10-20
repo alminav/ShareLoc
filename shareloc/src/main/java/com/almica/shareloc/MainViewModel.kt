@@ -11,7 +11,6 @@ import android.location.Location
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
-import androidx.camera.core.ImageCapture
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -44,14 +43,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val networkMonitor = NetworkMonitor(application)
     private val workManager = WorkManager.getInstance(application)
     private val prefs = PreferenceManager(application)
-/*
-    init {
-        if (prefs.isBackgroundCameraEnabled()) {
-            startRepeatingCamera()
-        }
-    }
-*/
-    private var imageCapture: ImageCapture? = null
     val isShareLocActive: StateFlow<Boolean> = networkMonitor.isShareLocActive
     // Track work status more robustly by checking for any active work with the tag
     val isWorkerRunning: StateFlow<Boolean> = workManager
@@ -146,7 +137,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updatePreferences(
-        phone: String,
+        phoneNumber: String,
+        partnerPhone: String,
         interval: Long,
         email: String,
         backgroundCameraEnabled: Boolean,
@@ -157,7 +149,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val oldBgCamEnabled = prefs.isBackgroundCameraEnabled()
         val oldBgCamInterval = prefs.getBackgroundCameraIntervalMinutes()
 
-        prefs.setPhoneNumber(phone)
+        prefs.setPhoneNumber(phoneNumber)
+        prefs.setPartnerPhoneNumber(partnerPhone)
         prefs.setIntervalMinutes(interval)
         prefs.setEmailAddress(email)
         prefs.setBackgroundCameraEnabled(backgroundCameraEnabled)
@@ -178,6 +171,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun getPartnerPhoneNumber() = prefs.getPartnerPhoneNumber()
     fun getPhoneNumber() = prefs.getPhoneNumber()
     fun getIntervalMinutes() = prefs.getIntervalMinutes()
     fun getEmailAddress() = prefs.getEmailAddress()
@@ -429,8 +423,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
-    @androidx.annotation.RequiresPermission(anyOf = [android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION])
+    fun getDeviceName(): String {
+        return prefs.getDeviceName()
+    }
+    @androidx.annotation.RequiresPermission(anyOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     fun fetchCurrentLocation(context: Context) {
         viewModelScope.launch {
             try {

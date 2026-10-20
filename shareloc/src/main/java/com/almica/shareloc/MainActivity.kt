@@ -6,8 +6,12 @@ import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.telephony.SmsManager
+import android.telephony.TelephonyManager
+import android.telephony.SubscriptionManager
+import com.google.android.gms.common.api.ApiException
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
@@ -63,6 +67,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.result.IntentSenderRequest
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Language
 import java.text.SimpleDateFormat
@@ -73,6 +78,7 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringArrayResource
+import com.google.android.gms.auth.api.identity.Identity
 
 private fun launchMapIntent(context: Context, latitude: Double, longitude: Double) {
     val gmmIntentUri = "geo:$latitude,$longitude?q=$latitude,$longitude".toUri()
@@ -92,9 +98,113 @@ private fun launchMapIntent(context: Context, latitude: Double, longitude: Doubl
 }
 
 class MainActivity : ComponentActivity() {
+    // 1. Launcher für das Ergebnis registrieren
+    private val phoneNumberHintIntentResultLauncher =
+        registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+            if (result.resultCode == RESULT_OK && result.data != null) {
+                try {
+                    val phoneNumber = Identity.getSignInClient(this)
+                        .getPhoneNumberFromIntent(result.data)
+                    val prefs = PreferenceManager(application)
+                    prefs.setPhoneNumber(phoneNumber)
+                    // 'phoneNumber' enthält nun die Nummer im E.164 Format (z.B. +49123456789)
+                    Timber.i("Erhaltene Nummer: $phoneNumber")
+                } catch (e: Exception) {
+                    Timber.i("Abrufen der Telefonnummer fehlgeschlagen ${e.message}")
+                }
+            }
+        }
+
+    // 2. Den Prozess starten
+    private fun requestPhoneNumberHint() {
+        val prefs = PreferenceManager(application)
+        if (prefs.getPhoneNumber().isNotBlank()) {
+            Timber.i("requestPhoneNumberHint: Telefonnummer bereits gespeichert (${prefs.getPhoneNumber()}), Überspringe Abfrage.")
+            return
+        }
+
+        val request = com.google.android.gms.auth.api.identity.GetPhoneNumberHintIntentRequest.builder().build()
+
+        Identity.getSignInClient(this)
+            .getPhoneNumberHintIntent(request)
+            .addOnSuccessListener { pendingIntent ->
+                try {
+                    val intentSenderRequest = IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                    phoneNumberHintIntentResultLauncher.launch(intentSenderRequest)
+                } catch (e: Exception) {
+                    Timber.w("requestPhoneNumberHint: Fehler beim Starten des Intents ${e.message}")
+                }
+            }
+            .addOnFailureListener { e ->
+                if (e is ApiException) {
+                    Timber.w("requestPhoneNumberHint: Google Play Services liefert keine Telefonnummer auf diesem Gerät (Code ${e.statusCode}): ${e.message}")
+                } else {
+                    Timber.w("requestPhoneNumberHint: API nicht verfügbar ${e.message}")
+                }
+                tryFallbackPhoneNumber(prefs)
+            }
+    }
+
+    fun tryFallbackPhoneNumber(prefs: PreferenceManager) {
+        if (prefs.getPhoneNumber().isNotBlank()) return
+        try {
+            val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.READ_PHONE_NUMBERS
+                ) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.READ_SMS
+                ) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.RECEIVE_SMS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.READ_PHONE_STATE
+                ) == PackageManager.PERMISSION_GRANTED ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.READ_PHONE_NUMBERS
+                ) == PackageManager.PERMISSION_GRANTED) ||
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.RECEIVE_SMS
+                ) == PackageManager.PERMISSION_GRANTED
+            }
+
+            if (hasPermission) {
+                val telephonyManager = getSystemService(TELEPHONY_SERVICE) as? TelephonyManager
+                val number = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val subscriptionManager = getSystemService(TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
+                    subscriptionManager?.getPhoneNumber(SubscriptionManager.DEFAULT_SUBSCRIPTION_ID)
+                } else {
+                    @Suppress("DEPRECATION", "MissingPermission")
+                    telephonyManager?.line1Number
+                }
+                if (!number.isNullOrBlank()) {
+                    prefs.setPhoneNumber(number)
+                    Timber.i("Fallback Telefonnummer von TelephonyManager erhalten: $number")
+                } else {
+                    Timber.i("TelephonyManager/SubscriptionManager hat keine Telefonnummer zurückgegeben.")
+                }
+            } else {
+                Timber.i("Keine Telefon-Berechtigung für Fallback vorhanden.")
+            }
+        } catch (e: SecurityException) {
+            Timber.w("Fallback-Abfrage der Telefonnummer aufgrund fehlender/eingeschränkter Berechtigung nicht möglich: ${e.message}")
+        } catch (e: Exception) {
+            Timber.w(e, "Fallback-Abfrage der Telefonnummer fehlgeschlagen")
+        }
+    }
+    lateinit var viewModel: MainViewModel
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestPhoneNumberHint()
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
@@ -102,13 +212,54 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background,
                 ) {
-                    val viewModel: MainViewModel = viewModel()
+                    viewModel = viewModel()
                     MainScreen(viewModel)
                 }
             }
         }
     }
+
+    private val smsReceiver = SmsReceiver()
+    // DIESE METHODE WIRD GESTARTET, WENN DIE NACHRICHT MATCHT
+    private fun onMessageMatched(sender: String?, messageBody: String) {
+        Timber.i("MainActivity Match gefunden von $sender! Text: $messageBody")
+        // Hier können Sie Ihre Logik einfügen: viewModel.startWorker()
+        if (messageBody.contains(getString(R.string.turn_on_location_sharing), ignoreCase = true)) {
+            Timber.i("MainActivity viewModel.startWorker()")
+            if (!viewModel.isWorkerRunning.value)
+                viewModel.startWorker()
+            else
+                Timber.i("MainActivity Worker already running")
+        } else if (messageBody.contains(getString(R.string.turn_off_location_sharing), ignoreCase = true)) {
+            Timber.i("MainActivity viewModel.stopWorker()")
+            viewModel.stopWorker()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        Timber.i("MainActivity onStart")
+        // Interface mit der MainActivity verknüpfen
+        smsReceiver.setSmsListener(object : SmsReceiver.SmsListener {
+            override fun onSmsReceived(sender: String?, messageBody: String) {
+                Timber.i("MainActivity onSmsReceived Text: $messageBody")
+                onMessageMatched(sender, messageBody)
+            }
+        })
+
+        // Receiver für eingehende SMS registrieren
+        val intentFilter = IntentFilter("android.provider.Telephony.SMS_RECEIVED")
+        registerReceiver(smsReceiver, intentFilter)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Wichtig, um Memory Leaks und Akkuverbrauch zu verhindern
+        unregisterReceiver(smsReceiver)
+    }
 }
+
+
 
 @RequiresApi(Build.VERSION_CODES.Q)
 @OptIn(ExperimentalMaterial3Api::class)
@@ -160,14 +311,13 @@ fun MainScreen(viewModel: MainViewModel) {
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
         hasRequiredPermissions = results.values.all { it }
-/*
-        val cameraGranted = results[Manifest.permission.CAMERA] == true ||
-                ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
 
-        if (cameraGranted && viewModel.isBackgroundCameraEnabled()) {
-            viewModel.startRepeatingCamera()
+        val phoneNumbersGranted = results[Manifest.permission.READ_PHONE_NUMBERS] == true ||
+                results[Manifest.permission.READ_PHONE_STATE] == true
+        if (phoneNumbersGranted) {
+            (context as? MainActivity)?.tryFallbackPhoneNumber(PreferenceManager(context))
         }
-*/
+
         val foregroundLocationGranted = results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 results[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
@@ -188,6 +338,9 @@ fun MainScreen(viewModel: MainViewModel) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         permissions.add(Manifest.permission.READ_PHONE_STATE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            permissions.add(Manifest.permission.READ_PHONE_NUMBERS)
+        }
         permissions.add(Manifest.permission.SEND_SMS)
         permissions.add(Manifest.permission.RECEIVE_SMS)
         permissions.add(Manifest.permission.CAMERA)
@@ -262,6 +415,7 @@ fun MainScreen(viewModel: MainViewModel) {
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             MainScreenContent(
+                viewModel.getDeviceName(),
                 isShareLocActive = isShareLocActive,
                 isWorkerRunning = isWorkerRunning,
                 workerInterval = viewModel.getIntervalMinutes(),
@@ -361,14 +515,15 @@ fun MainScreen(viewModel: MainViewModel) {
     }
     if (showSettingsDialog) {
         SettingsDialog(
-            currentPhone = viewModel.getPhoneNumber(),
+            currentPartnerPhoneNumber = viewModel.getPartnerPhoneNumber(),
+            currentPhoneNumber = viewModel.getPhoneNumber(),
             currentInterval = viewModel.getIntervalMinutes(),
             currentEmail = viewModel.getEmailAddress(),
             currentBackgroundCameraEnabled = viewModel.isBackgroundCameraEnabled(),
             currentBackgroundCameraInterval = viewModel.getBackgroundCameraIntervalMinutes(),
             currentBackgroundCameraSoundEnabled = viewModel.isBackgroundCameraSoundEnabled(),
             onDismiss = { showSettingsDialog = false },
-            onSave = { phone, interval, email, backgroundCameraEnabled, bgCameraInterval, bgCameraSoundEnabled ->
+            onSave = { phone, partnerPhone, interval, email, backgroundCameraEnabled, bgCameraInterval, bgCameraSoundEnabled ->
                 if (backgroundCameraEnabled) {
                     val hasCameraPermission = ContextCompat.checkSelfPermission(
                         context,
@@ -378,7 +533,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                     }
                 }
-                viewModel.updatePreferences(phone, interval, email, backgroundCameraEnabled, bgCameraInterval, bgCameraSoundEnabled)
+                viewModel.updatePreferences(phone, partnerPhone, interval, email, backgroundCameraEnabled, bgCameraInterval, bgCameraSoundEnabled)
                 showSettingsDialog = false
             }
         )
@@ -386,7 +541,7 @@ fun MainScreen(viewModel: MainViewModel) {
 
     if (showLocationDialog.first) {
         LocationListDialog(
-            deviceName = getDeviceName(),
+            deviceName = viewModel.getDeviceName(),
             locations = locationList,
             onlyPhotos = showLocationDialog.second,
             onDismiss = {
@@ -445,7 +600,7 @@ fun MainScreen(viewModel: MainViewModel) {
 
     if (showSmsDialog) {
         SendSmsDialog(
-            initialPhone = viewModel.getPhoneNumber(),
+            initialPartnerPhone = viewModel.getPartnerPhoneNumber(),
             onDismiss = { showSmsDialog = false },
             onSend = { phone, message ->
                 showSmsDialog = false
@@ -479,16 +634,19 @@ fun MainScreen(viewModel: MainViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsDialog(
-    currentPhone: String,
+    currentPhoneNumber: String,
+    currentPartnerPhoneNumber: String,
     currentInterval: Long,
     currentEmail: String,
     currentBackgroundCameraEnabled: Boolean,
     currentBackgroundCameraInterval: Float,
     currentBackgroundCameraSoundEnabled: Boolean,
     onDismiss: () -> Unit,
-    onSave: (phone: String, interval: Long, email: String, backgroundCameraEnabled: Boolean, bgCameraInterval: Float, bgCameraSoundEnabled: Boolean) -> Unit
+    onSave: (phone: String, partnerPhone: String,
+             interval: Long, email: String, backgroundCameraEnabled: Boolean, bgCameraInterval: Float, bgCameraSoundEnabled: Boolean) -> Unit
 ) {
-    var phone by remember { mutableStateOf(currentPhone) }
+    var partnerPhoneNumber by remember { mutableStateOf(currentPartnerPhoneNumber) }
+    var phoneNumber by remember { mutableStateOf(currentPhoneNumber) }
     var intervalStr by remember { mutableStateOf(currentInterval.toString()) }
     var email by remember { mutableStateOf(currentEmail) }
     var backgroundCameraEnabled by remember { mutableStateOf(currentBackgroundCameraEnabled) }
@@ -503,9 +661,17 @@ fun SettingsDialog(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())) {
                 OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
+                    value = phoneNumber,
+                    onValueChange = { phoneNumber = it },
                     label = { Text(stringResource(R.string.sms_phone_label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = partnerPhoneNumber,
+                    onValueChange = { partnerPhoneNumber = it },
+                    label = { Text(stringResource(R.string.sms_partner_phone_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
                 )
@@ -626,7 +792,8 @@ fun SettingsDialog(
                     val interval = intervalStr.toLongOrNull() ?: 15L
                     val bgCameraInterval = bgCameraIntervalStr.replace(',', '.').toFloatOrNull() ?: 0.25f
                     onSave(
-                        phone,
+                        phoneNumber.trim(),
+                        partnerPhoneNumber.trim(),
                         if (interval < 15) 15L else interval,
                         email.trim(),
                         backgroundCameraEnabled,
@@ -649,12 +816,12 @@ fun SettingsDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendSmsDialog(
-    initialPhone: String,
+    initialPartnerPhone: String,
     initialMessage: String = "Test SMS vom Standort Monitor",
     onDismiss: () -> Unit,
     onSend: (phone: String, message: String) -> Unit
 ) {
-    var phone by remember { mutableStateOf(initialPhone) }
+    var phone by remember { mutableStateOf(initialPartnerPhone) }
     var message by remember { mutableStateOf(initialMessage) }
     // 1. String-Array aus den Ressourcen laden
     val options = stringArrayResource(id = R.array.sms_messages)
@@ -998,7 +1165,7 @@ fun ContactControlCard(
 ) {
     val context = LocalContext.current
     val prefs = PreferenceManager(context)
-    val phoneNumber = remember { prefs.getPhoneNumber() }
+    val partnerPhoneNumber = remember { prefs.getPartnerPhoneNumber() }
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -1045,7 +1212,7 @@ fun ContactControlCard(
             OutlinedButton(onClick = {
                 // Bypasses permission requirements by letting the user hit "Send" themselves
                 val dialIntent = Intent(Intent.ACTION_DIAL).apply {
-                    data = "tel:${phoneNumber}".toUri()
+                    data = "tel:${partnerPhoneNumber}".toUri()
                 }
                 try {
                     context.startActivity(dialIntent)
@@ -1058,7 +1225,7 @@ fun ContactControlCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(imageVector = Icons.Default.Phone, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.telephone_call, phoneNumber))
+                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.telephone_call, partnerPhoneNumber))
                 }
             }
         }
@@ -1345,6 +1512,7 @@ fun StatusCard(
 
 @Composable
 fun MainScreenContent(
+    deviceName: String,
     isShareLocActive: Boolean,
     isWorkerRunning: Boolean,
     workerInterval: Long,
@@ -1363,7 +1531,6 @@ fun MainScreenContent(
     serviceRestartCount: Int
 ) {
     val timeFormatter = remember { SimpleDateFormat("HH:mm:ss", Locale.getDefault()) }
-    val deviceName = getDeviceName()
     val statusBoxColor by animateColorAsState(
         targetValue = if (isShareLocActive) MaterialTheme.colorScheme.errorContainer
                       else MaterialTheme.colorScheme.primaryContainer,
@@ -1470,11 +1637,11 @@ fun MainScreenActivePreview() {
             color = MaterialTheme.colorScheme.background
         ) {
             MainScreenContent(
+                deviceName = "0123456789",
                 isShareLocActive = true,
                 isWorkerRunning = false,
                 workerInterval = 15L,
                 sendLocationCount = 3,
-                serviceRestartCount = 0,
                 notificationsEnabled = true,
                 lastStatusChangeTime = System.currentTimeMillis(),
                 onNotificationsChanged = {},
@@ -1486,6 +1653,7 @@ fun MainScreenActivePreview() {
                 onSendSmsNow = {},
                 onDeleteOldRecords = {},
                 onTakePicture = {},
+                serviceRestartCount = 0,
             )
         }
     }
@@ -1500,11 +1668,11 @@ fun MainScreenInactivePreview() {
             color = MaterialTheme.colorScheme.background
         ) {
             MainScreenContent(
+                deviceName = "0123456789",
                 isShareLocActive = false,
                 isWorkerRunning = true,
                 workerInterval = 15L,
                 sendLocationCount = 5,
-                serviceRestartCount = 0,
                 notificationsEnabled = false,
                 lastStatusChangeTime = System.currentTimeMillis(),
                 onNotificationsChanged = {},
@@ -1516,6 +1684,7 @@ fun MainScreenInactivePreview() {
                 onSendSmsNow = {},
                 onDeleteOldRecords = {},
                 onTakePicture = {},
+                serviceRestartCount = 0,
             )
         }
     }

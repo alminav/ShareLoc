@@ -19,6 +19,16 @@ import androidx.core.net.toUri
 import timber.log.Timber
 
 class SmsReceiver : BroadcastReceiver() {
+    interface SmsListener {
+        fun onSmsReceived(sender: String?, messageBody: String)
+    }
+
+    private var listener: SmsListener? = null
+
+    fun setSmsListener(listener: SmsListener) {
+        Timber.i("SmsReceiver setSmsListener")
+        this.listener = listener
+    }
 
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
@@ -29,7 +39,22 @@ class SmsReceiver : BroadcastReceiver() {
                 val sender = messages?.firstOrNull()?.displayOriginatingAddress.orEmpty()
                 val body = messages?.joinToString(separator = "") { it.displayMessageBody.orEmpty() }.orEmpty()
                 Timber.i("SMS von $sender: $body")
-
+                for (sms in messages) {
+                    val sender = sms.originatingAddress
+                    val messageBody = sms.messageBody
+                    Timber.i("SmsReceiver Sender: $sender, Body: $messageBody")
+                    // Handle your message content here
+                    // Daten an das Interface in der MainActivity übergeben
+                    val relevantKeywords = listOf("turn on", "turn off", "status", "alert", "mobile", "warnung", "check")
+                    val containsKeyword = relevantKeywords.any { keyword ->
+                        body.contains(keyword, ignoreCase = true)
+                    }
+                    if (containsKeyword) {
+                        Timber.i("SMS von $sender mit relevanten Schlüsselwörtern empfangen")
+                        listener?.onSmsReceived(sender, messageBody)
+                            ?: Timber.w("SmsListener ist null")
+                    }
+                }
                 if (shouldShowNotification(context, sender, body)) {
                     showSmsNotification(context, sender, body)
                 } else {
@@ -64,7 +89,7 @@ class SmsReceiver : BroadcastReceiver() {
             return true
         }
 
-        val configuredNumber = preferenceManager.getPhoneNumber().trim()
+        val configuredNumber = preferenceManager.getPartnerPhoneNumber().trim()
 
         // Telefonnummern für Vergleich normalisieren
         val normalizedSender = sender.replace(Regex("[^0-9+]"), "")
@@ -81,7 +106,7 @@ class SmsReceiver : BroadcastReceiver() {
         }
 
         // Regel 2: Inhalt enthält relevante Schlüsselwörter für ShareLoc
-        val relevantKeywords = listOf("data", "daten", "status", "alert", "mobile", "warnung", "check")
+        val relevantKeywords = listOf("turn on", "turn off", "status", "alert", "mobile", "warnung", "check")
         val containsKeyword = relevantKeywords.any { keyword ->
             body.contains(keyword, ignoreCase = true)
         }

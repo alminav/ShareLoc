@@ -182,7 +182,7 @@ private fun takePicture(
     }
 
     (actionSound as? MediaActionSound)?.play(MediaActionSound.SHUTTER_CLICK)
-    val deviceName = getDeviceName()
+    val deviceName = viewModel.getDeviceName()
     val photoDate = getReadableDate(System.currentTimeMillis())
     val photoFile = File(context.cacheDir, "${deviceName}_${photoDate}.jpg")
     val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile)

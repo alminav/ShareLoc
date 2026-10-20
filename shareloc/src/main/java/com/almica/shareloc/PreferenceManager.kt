@@ -13,6 +13,14 @@ class PreferenceManager(context: Context) {
         Context.MODE_PRIVATE
     )
 
+    fun getPartnerPhoneNumber(): String {
+        return prefs.getString(Constants.KEY_PARTNER_PHONE_NUMBER, "+4915776049418") ?: "+4915776049418"
+    }
+
+    fun setPartnerPhoneNumber(number: String) {
+        prefs.edit { putString(Constants.KEY_PARTNER_PHONE_NUMBER, number) }
+    }
+
     fun getPhoneNumber(): String {
         return prefs.getString(Constants.KEY_PHONE_NUMBER, "+4915776049418") ?: "+4915776049418"
     }
@@ -117,17 +125,23 @@ class PreferenceManager(context: Context) {
     fun setBackgroundCameraSoundEnabled(enabled: Boolean) {
         prefs.edit { putBoolean(Constants.KEY_BG_CAMERA_SOUND_ENABLED, enabled) }
     }
-}
 
-fun getDeviceName(): String {
-    val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
-    val model = Build.MODEL
+    fun getDeviceName(): String {
+        val number = getPhoneNumber()
+        if (number.isNotBlank()) {
+            return number
+        }
 
-    val name = if (model.startsWith(manufacturer, ignoreCase = true)) {
-        model
-    } else {
-        "$manufacturer $model"
+        val manufacturer = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        val model = Build.MODEL
+
+        val name = if (model.startsWith(manufacturer, ignoreCase = true)) {
+            model
+        } else {
+            "$manufacturer $model"
+        }
+        Timber.i("Device name: $name")
+        return name
     }
-    Timber.i("Device name: $name")
-    return name
 }
+

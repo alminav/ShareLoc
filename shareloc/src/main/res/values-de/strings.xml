@@ -19,6 +19,7 @@
     <string name="sms_error">Fehler beim Senden der SMS</string>
     <string name="sms_permission_denied">SMS-Berechtigung verweigert</string>
     <string name="sms_phone_label">Telefonnummer</string>
+    <string name="sms_partner_phone_label">Partner-Telefonnummer</string>
     <string name="email_label">Empfänger-E-Mail-Adresse</string>
     <string name="sms_interval_label">Intervall (Minuten)</string>
     <string name="enable_background_camera_label">Hintergrundkamera aktivieren</string>
@@ -60,6 +61,8 @@
     <string name="contact">✋Kontakt</string>
     <string name="telephone_call">Telefon Anruf (%1$s)</string>
     <string name="service_restart_count">Service Restarts: %1$d</string>
+    <string name="turn_on_location_sharing">Turn on</string>
+    <string name="turn_off_location_sharing">Turn off</string>
     <string-array name="sms_messages">
         <item>👌 OK</item>
         <item>🚗 Ich fahr jetzt los</item>
@@ -70,5 +73,7 @@
         <item>🏁 Bin angekommen</item>
         <item>❓ Wo bist Du?</item>
         <item>😊 Alles in Ordnung</item>
+        <item>🔛 Turn on</item>
+        <item>🔚 Turn off</item>
     </string-array>
 </resources>

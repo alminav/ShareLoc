@@ -158,7 +158,8 @@ class ShareLocWorker(
             val lat = location?.latitude ?: 0.0
             val lon = location?.longitude ?: 0.0
             val alt = location?.altitude ?: 0.0
-            val deviceName = getDeviceName()
+            val deviceName = prefs.getDeviceName()
+            Timber.i("deviceName: $deviceName")
 
             val isLocationSent = sendLocation(deviceName, imageUrl, lat, lon, altitude = alt, temperature = temp, level = level)
             if (isLocationSent) {

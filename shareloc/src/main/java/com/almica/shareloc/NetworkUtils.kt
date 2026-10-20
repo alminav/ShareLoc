@@ -26,6 +26,7 @@ object Constants {
     const val WORK_TAG = "mobile_data_check_work"
     const val NOTIFICATION_CHANNEL_ID = "mobile_data_channel"
     const val PREFS_NAME = "checker_prefs"
+    const val KEY_PARTNER_PHONE_NUMBER = "partner_phone_number"
     const val KEY_PHONE_NUMBER = "phone_number"
     const val KEY_INTERVAL_MINS = "interval_minutes"
     const val KEY_INSTALLATION_ID = "installation_id"
@@ -38,6 +39,7 @@ object Constants {
     const val KEY_BACKGROUND_CAMERA_ENABLED = "background_camera_enabled"
     const val KEY_BG_CAMERA_INTERVAL_MINS = "bg_camera_interval_minutes"
     const val KEY_BG_CAMERA_SOUND_ENABLED = "bg_camera_sound_enabled"
+    const val KEY_TELEPHONE_NUMBER = "telephone_number"
 }
 
 fun isNetworkAvailable(context: Context): Boolean {
@@ -104,19 +106,27 @@ fun isShareLocEnabled(context: Context): Triple<Boolean, Float, Int> {
         return Triple(false, temp, level)
     }
 
-    val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
-    val isEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        Timber.i("TelephonyManager.getDataNetworkType() = ${telephonyManager.dataNetworkType}")
-        Timber.i("TelephonyManager.isDataEnabled() = ${telephonyManager.isDataEnabled}")
-        telephonyManager.isDataEnabled
-    } else {
-        @Suppress("DEPRECATION")
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val mobileDataMethod = connectivityManager.javaClass.getDeclaredMethod("getMobileDataEnabled")
-        mobileDataMethod.isAccessible = true
-        mobileDataMethod.invoke(connectivityManager) as Boolean
+    try {
+        val telephonyManager = context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        val isEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Timber.i("TelephonyManager.getDataNetworkType() = ${telephonyManager.dataNetworkType}")
+            Timber.i("TelephonyManager.isDataEnabled() = ${telephonyManager.isDataEnabled}")
+            telephonyManager.isDataEnabled
+        } else {
+            @Suppress("DEPRECATION")
+            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val mobileDataMethod = connectivityManager.javaClass.getDeclaredMethod("getMobileDataEnabled")
+            mobileDataMethod.isAccessible = true
+            mobileDataMethod.invoke(connectivityManager) as Boolean
+        }
+        return Triple(isEnabled, temp, level)
+    } catch (e: SecurityException) {
+        Timber.w("SecurityException beim Prüfen des Telephony-Status: ${e.message}")
+        return Triple(false, temp, level)
+    } catch (e: Exception) {
+        Timber.w(e, "Fehler beim Prüfen des Telephony-Status")
+        return Triple(false, temp, level)
     }
-    return Triple(isEnabled, temp, level)
 }
 
 fun getBatteryTemperature(context: Context): Float {

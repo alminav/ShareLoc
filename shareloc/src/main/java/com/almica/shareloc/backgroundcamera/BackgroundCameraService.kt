@@ -33,7 +33,6 @@ import com.almica.shareloc.NetworkClient
 import com.almica.shareloc.PreferenceManager
 import com.almica.shareloc.compressImageFile
 import com.almica.shareloc.getBatteryLevel
-import com.almica.shareloc.getDeviceName
 import com.almica.shareloc.sendLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -255,7 +254,7 @@ class BackgroundCameraService : LifecycleService() {
                     val lat = currentLocation?.latitude ?: 0.0
                     val lon = currentLocation?.longitude ?: 0.0
                     val alt = currentLocation?.altitude ?: 0.0
-                    val deviceName = getDeviceName()
+                    val deviceName = prefs.getDeviceName()
                     serverResponse.url?.let {
                         sendLocation(deviceName, it,
                             lat, lon, altitude = alt, temperature = temperature, level = level)
