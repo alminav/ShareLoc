@@ -49,9 +49,9 @@
     <string name="check_status_now">Status jetzt prüfen</string>
     <string name="enable_notifications_label">Benachrichtigungen aktivieren</string>
     <string name="fetch_limit_all">Alle</string>
-    <string name="device_label">📱 Gerät: %1$s</string>
+    <string name="device_label">📞 %1$s ⏲️ %2$s</string>
     <string name="open_in_map">🗺️ Google Maps</string>
-    <string name="store_in_gallery">▶️ Galerie</string>
+    <string name="store_in_gallery">💾️ Galerie</string>
     <string name="image_saved">Bild gespeichert</string>
     <string name="image_not_saved">Bild konnte nicht gespeichert werden</string>
     <string name="take_picture">Foto aufnehmen</string>

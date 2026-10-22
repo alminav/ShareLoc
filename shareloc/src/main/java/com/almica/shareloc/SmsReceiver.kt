@@ -136,10 +136,14 @@ class SmsReceiver : BroadcastReceiver() {
                 putExtra(Constants.SMS_LATITUDE, coordinates.first)
                 putExtra(Constants.SMS_LONGITUDE, coordinates.second)
             }
-        } else {
-            Timber.i("createContentPendingIntent BplacedActivity showImages.php")
+        } else if (body.containsImageKeyword()) {
+            Timber.i("createContentPendingIntent showImages.php")
             Intent(Intent.ACTION_VIEW, "http://almica.bplaced.net/showImages.php".toUri()).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+        } else {
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
         }
 
@@ -253,7 +257,9 @@ class SmsReceiver : BroadcastReceiver() {
     private fun String.containsRelevantKeyword(): Boolean {
         return RELEVANT_KEYWORDS.any { keyword -> this.contains(keyword, ignoreCase = true) }
     }
-
+    private fun String.containsImageKeyword(): Boolean {
+        return IMAGE_KEYWORDS.any { keyword -> this.contains(keyword, ignoreCase = true) }
+    }
     private fun extractCoordinates(body: String): Pair<Double, Double>? {
         val matches = COORDINATE_REGEX.findAll(body)
             .mapNotNull { it.groupValues[1].toDoubleOrNull() }
@@ -263,7 +269,8 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        private val RELEVANT_KEYWORDS = listOf("turn on", "turn off", "status", "alert", "mobile", "position", "check")
+        private val RELEVANT_KEYWORDS = listOf("turn on", "turn off", "status", "foto", "photo", "position", "check")
+        private val IMAGE_KEYWORDS = listOf("foto", "photo")
         private val COORDINATE_REGEX = Regex("""(-?\d+(?:\.\d+)?)\s*°""")
 
         const val ACTION_REPLY_SMS = "com.almica.shareloc.ACTION_REPLY_SMS"

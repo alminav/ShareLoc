@@ -1,3 +1,7 @@
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -13,9 +17,13 @@ android {
         applicationId = "com.almica.shareloc"
         minSdk = 24
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 12
+        versionName = "1.1.2"
+        // Generiert einen Zeitstempel im gewünschten Format
+        val buildTime = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
 
+        // Fügt das Feld zu BuildConfig hinzu
+        buildConfigField("String", "BUILD_TIME", "\"$buildTime\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

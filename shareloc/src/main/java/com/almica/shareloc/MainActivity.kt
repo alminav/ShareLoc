@@ -1719,6 +1719,7 @@ fun MainScreenContent(
                        else MaterialTheme.colorScheme.onPrimaryContainer
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
     val scope = rememberCoroutineScope()
+    val buildTime = BuildConfig.BUILD_TIME
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1735,7 +1736,7 @@ fun MainScreenContent(
             color = MaterialTheme.colorScheme.onBackground
         )*/
         Text(
-            text = stringResource(R.string.device_label, deviceName),
+            text = stringResource(R.string.device_label, deviceName, buildTime),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
