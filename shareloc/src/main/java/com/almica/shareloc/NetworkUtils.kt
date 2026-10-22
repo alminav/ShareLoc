@@ -40,6 +40,8 @@ object Constants {
     const val KEY_BG_CAMERA_INTERVAL_MINS = "bg_camera_interval_minutes"
     const val KEY_BG_CAMERA_SOUND_ENABLED = "bg_camera_sound_enabled"
     const val KEY_TELEPHONE_NUMBER = "telephone_number"
+    const val SMS_LATITUDE = "sms_latitude"
+    const val SMS_LONGITUDE = "sms_longitude"
 }
 
 fun isNetworkAvailable(context: Context): Boolean {

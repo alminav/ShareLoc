@@ -1,6 +1,8 @@
 package com.almica.shareloc
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.app.ComponentCaller
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.os.Build
@@ -61,6 +63,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import android.graphics.BitmapFactory
+import android.net.Uri
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -69,6 +72,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.result.IntentSenderRequest
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Language
 import java.text.SimpleDateFormat
@@ -81,19 +86,51 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringArrayResource
 import com.google.android.gms.auth.api.identity.Identity
 
-private fun launchMapIntent(context: Context, latitude: Double, longitude: Double) {
-    val gmmIntentUri = "geo:$latitude,$longitude?q=$latitude,$longitude".toUri()
+/**
+ * Öffnet die angegebenen Koordinaten in Google Maps oder einer alternativen Karten-App/im Browser.
+ *
+ * @param context Der Context zum Starten des Intents
+ * @param latitude Breitengrad
+ * @param longitude Längengrad
+ * @param label Optionaler Name/Titel für den Stecknadel-Marker
+ * @param zoom Optionaler Zoom-Level (1 bis 21, z. B. 15 für Straßenansicht)
+ */
+fun openCoordinatesInGoogleMaps(
+    context: Context,
+    latitude: Double,
+    longitude: Double,
+    label: String? = null,
+    zoom: Int? = null
+) {
+    val encodedLabel = if (!label.isNullOrBlank()) "(${Uri.encode(label)})" else ""
+    val zoomParam = if (zoom != null && zoom in 1..21) "&z=$zoom" else ""
+    val gmmIntentUri = "geo:$latitude,$longitude?q=$latitude,$longitude$encodedLabel$zoomParam".toUri()
+
     val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri).apply {
-        setPackage("com.google.android.apps.maps")
+        setPackage("com.google.android.apps.maps") // Zunächst bevorzugt Google Maps ansprechen
     }
+
     try {
         context.startActivity(mapIntent)
-    } catch (e: ActivityNotFoundException) {
+    } catch (_: ActivityNotFoundException) {
+        // Fallback 1: Versuchen, den Intent mit einer beliebigen anderen Karten-App zu öffnen
         mapIntent.setPackage(null)
         try {
             context.startActivity(mapIntent)
-        } catch (e2: ActivityNotFoundException) {
-            Toast.makeText(context, "No map application found", Toast.LENGTH_SHORT).show()
+        } catch (_: ActivityNotFoundException) {
+            // Fallback 2: Im Browser öffnen, falls gar keine Karten-App installiert ist
+            val webUrl = if (zoom != null && zoom in 1..21) {
+                "https://www.google.com/maps/@$latitude,$longitude,${zoom}z"
+            } else {
+                "https://www.google.com/maps/search/?api=1&query=$latitude,$longitude"
+            }
+            Timber.i("Opening web URL: $webUrl")
+            val webIntent = Intent(Intent.ACTION_VIEW, webUrl.toUri())
+            try {
+                context.startActivity(webIntent)
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, "Keine Karten-App oder Browser gefunden", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
@@ -223,30 +260,80 @@ class MainActivity : ComponentActivity() {
     private val smsReceiver = SmsReceiver()
     // DIESE METHODE WIRD GESTARTET, WENN DIE NACHRICHT MATCHT
     private fun onMessageMatched(sender: String?, messageBody: String) {
-        Timber.i("MainActivity Match gefunden von $sender! Text: $messageBody")
-        // Hier können Sie Ihre Logik einfügen: viewModel.startWorker()
-        if (messageBody.contains(getString(R.string.turn_on_location_sharing), ignoreCase = true)) {
-            Timber.i("MainActivity viewModel.startWorker()")
-            if (!viewModel.isWorkerRunning.value)
-                viewModel.startWorker()
-            else
-                Timber.i("MainActivity Worker already running")
-        } else if (messageBody.contains(getString(R.string.turn_off_location_sharing), ignoreCase = true)) {
-            Timber.i("MainActivity viewModel.stopWorker()")
-            viewModel.stopWorker()
+        Timber.i("Match gefunden von $sender! Text: $messageBody")
+        try {
+            if (messageBody.contains(getString(R.string.position), ignoreCase = true)) {
+                Timber.i("Position found")
+                var latitude: Double? = null
+                var longitude: Double? = null
+                messageBody.split(" ").forEach { item ->
+                    if (item.endsWith("°")) {
+                        val num = item.replace("°", "").toDoubleOrNull()
+                        if (num != null) {
+                            if (latitude == null) {
+                                Timber.i("Latitude: $num")
+                                latitude = num
+                            } else {
+                                Timber.i("Longitude: $num")
+                                longitude = num
+                            }
+                        } else {
+                            Timber.i("Fehlerhafte Koordinaten: $item")
+                        }
+                    }
+                }
+                val lat = latitude
+                val lng = longitude
+                if (lat != null && lng != null) {
+                    openCoordinatesInGoogleMaps(
+                        context = this,
+                        lat,
+                        lng,
+                        getString(R.string.i_am_here),
+                        zoom = 10
+                    )
+                }
+
+            } else if (messageBody.contains(getString(R.string.turn_on_location_sharing), ignoreCase = true)) {
+                Timber.i("MainActivity viewModel.startWorker()")
+                if (!viewModel.isWorkerRunning.value)
+                    viewModel.startWorker()
+                else
+                    Timber.i("MainActivity Worker already running")
+            } else if (messageBody.contains(getString(R.string.turn_off_location_sharing), ignoreCase = true)) {
+                Timber.i("MainActivity viewModel.stopWorker()")
+                viewModel.stopWorker()
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error processing SMS in onMessageMatched")
         }
     }
+
+    override fun onNewIntent(intent: Intent, caller: ComponentCaller) {
+        super.onNewIntent(intent, caller)
+        val latitude = intent.getDoubleExtra(Constants.SMS_LATITUDE, 0.0)
+        val longitude = intent.getDoubleExtra(Constants.SMS_LONGITUDE, 0.0)
+        Timber.i("MainActivity onNewIntent latitude: $latitude, longitude: $longitude")
+        if (latitude != 0.0 && longitude != 0.0) {
+            openCoordinatesInGoogleMaps(
+                this,
+                latitude,
+                longitude,
+                getString(R.string.i_am_here),
+                zoom = 10
+            )
+        }
+    }
+
 
     override fun onStart() {
         super.onStart()
         Timber.i("MainActivity onStart")
         // Interface mit der MainActivity verknüpfen
-        smsReceiver.setSmsListener(object : SmsReceiver.SmsListener {
-            override fun onSmsReceived(sender: String?, messageBody: String) {
-                Timber.i("MainActivity onSmsReceived Text: $messageBody")
-                onMessageMatched(sender, messageBody)
-            }
-        })
+        smsReceiver.setSmsListener { sender, messageBody ->
+            Timber.i("MainActivity onSmsReceived Text: $messageBody")
+            onMessageMatched(sender, messageBody)
+        }
 
         // Receiver für eingehende SMS registrieren
         val intentFilter = IntentFilter("android.provider.Telephony.SMS_RECEIVED")
@@ -627,6 +714,7 @@ fun MainScreen(viewModel: MainViewModel) {
 
     if (showSmsDialog) {
         SendSmsDialog(
+            viewModel,
             initialPartnerPhone = viewModel.getPartnerPhoneNumber(),
             onDismiss = { showSmsDialog = false },
             onSend = { phone, message ->
@@ -859,14 +947,24 @@ fun SettingsDialog(
     )
 }
 
+@SuppressLint("MissingPermission")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendSmsDialog(
+    viewModel: MainViewModel,
     initialPartnerPhone: String,
     initialMessage: String = "Test SMS vom Standort Monitor",
     onDismiss: () -> Unit,
     onSend: (phone: String, message: String) -> Unit
 ) {
+    // Collect location directly from ViewModel
+    val currentLocation by viewModel.locationState.collectAsState()
+    val context = LocalContext.current
+    val resources = LocalResources.current
+    // Fetch location once when the screen is launched
+    LaunchedEffect(Unit) {
+        viewModel.fetchCurrentLocation(context)
+    }
     var phone by remember { mutableStateOf(initialPartnerPhone) }
     var message by remember { mutableStateOf(initialMessage) }
     // 1. String-Array aus den Ressourcen laden
@@ -875,94 +973,123 @@ fun SendSmsDialog(
     // 2. Zustände für die Auswahl und Sichtbarkeit des Menüs
     var expanded by remember { mutableStateOf(false) }
     var selectedOptionText by remember { mutableStateOf(options.getOrNull(0) ?: "") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.send_sms_title)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text(stringResource(R.string.sms_recipient_label)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = message,
-                    onValueChange = { message = it },
-                    label = { Text(stringResource(R.string.sms_message_label)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    maxLines = 5
-                )
-                // 3. Container für das Material 3 Dropdown-Menü
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = it }
+    Timber.i("SendSmsDialog currentLocation: $currentLocation")
+    if (currentLocation != null) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.send_sms_title) + "\n" + currentLocation!!.latitude.format(4) + "° " + currentLocation!!.longitude.format(4) + "°") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Das Textfeld zeigt das aktuell ausgewählte Element an
-                    TextField(
-                        // Wichtig für Material 3: Verknüpft das Textfeld mit dem Menü-Anker
-                        modifier = Modifier
-                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                            .fillMaxWidth(),
-                        readOnly = true,
-                        value = selectedOptionText,
-                        onValueChange = {},
-                        label = { Text(stringResource(R.string.sms_template_label)) },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { phone = it },
+                        label = { Text(stringResource(R.string.sms_recipient_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true
                     )
-
-                    // Das eigentliche Dropdown-Menü mit den Optionen
-                    ExposedDropdownMenu(
+                    OutlinedTextField(
+                        value = message,
+                        onValueChange = { message = it },
+                        label = { Text(stringResource(R.string.sms_message_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 5
+                    )
+                    // 3. Container für das Material 3 Dropdown-Menü
+                    ExposedDropdownMenuBox(
                         expanded = expanded,
-                        onDismissRequest = { expanded = false }
+                        onExpandedChange = { expanded = it }
                     ) {
-                        options.forEach { selectionOption ->
-                            DropdownMenuItem(
-                                text = { Text(selectionOption) },
-                                onClick = {
-                                    message = selectionOption
-                                    selectedOptionText = selectionOption
-                                    expanded = false
-                                    // Hier kannst du eine Aktion ausführen (z. B. ein ViewModel benachrichtigen)
-                                },
-                                contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
-                            )
+                        // Das Textfeld zeigt das aktuell ausgewählte Element an
+                        TextField(
+                            // Wichtig für Material 3: Verknüpft das Textfeld mit dem Menü-Anker
+                            modifier = Modifier
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth(),
+                            readOnly = true,
+                            value = selectedOptionText,
+                            onValueChange = {},
+                            label = { Text(stringResource(R.string.sms_template_label)) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                        )
+
+                        // Das eigentliche Dropdown-Menü mit den Optionen
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            options.forEach { selectionOption ->
+                                DropdownMenuItem(
+                                    text = { Text(selectionOption) },
+                                    onClick = {
+                                        if (selectionOption.contains("position", ignoreCase = true)) {
+                                            currentLocation?.let {
+                                                message =
+                                                    selectionOption + " ${it.latitude.format(4)}° ${
+                                                        it.longitude.format(
+                                                            4
+                                                        )
+                                                    }°"
+                                            } ?: run {
+                                                message =
+                                                    selectionOption + resources.getString(R.string.sms_location_error)
+                                            }
+                                        } else
+                                            message = selectionOption
+                                        selectedOptionText = selectionOption
+                                        expanded = false
+                                        // Hier kannst du eine Aktion ausführen (z. B. ein ViewModel benachrichtigen)
+                                    },
+                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                                )
+                            }
                         }
                     }
                 }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (phone.isNotBlank() && message.isNotBlank()) {
+                            onSend(phone, message)
+                        }
+                    },
+                    enabled = phone.isNotBlank() && message.isNotBlank()
+                ) {
+                    Text(stringResource(R.string.send))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.cancel))
+                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (phone.isNotBlank() && message.isNotBlank()) {
-                        onSend(phone, message)
-                    }
-                },
-                enabled = phone.isNotBlank() && message.isNotBlank()
+        )
+    } else {
+            Box(
+                contentAlignment = Alignment.BottomCenter,
+                modifier = Modifier.fillMaxSize(0.2f).padding(bottom = 46.dp)
             ) {
-                Text(stringResource(R.string.send))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
+                Column {
+                    Text(stringResource(R.string.waiting_for_location))
+                    CircularProgressIndicator(
+                        color = MaterialTheme.colorScheme.primary,
+                        strokeWidth = 4.dp,
+                        modifier = Modifier.padding(8.dp) // Padding prevents touching the container edge
+                    )
+                }
             }
         }
-    )
 }
 
-private fun Double.format(digits: Int): String = String.format(Locale.getDefault(), "%.${digits}f", this)
+fun Double.format(digits: Int): String = String.format(Locale.ENGLISH, "%.${digits}f", this)
 
 @Composable
 fun LocationListDialog(
@@ -1091,7 +1218,7 @@ fun LocationListDialog(
             confirmButton = {
                 selectedImageLocation?.let {
                     TextButton(onClick = {
-                        launchMapIntent(context, it.latitude, it.longitude)
+                        openCoordinatesInGoogleMaps(context, it.latitude, it.longitude)
                     }) {
                         Text(stringResource(R.string.open_in_map))
                     }
@@ -1148,7 +1275,7 @@ fun LocationListDialog(
                                     if (!image_location.image_url.isNullOrBlank()) {
                                         selectedImageLocation = image_location
                                     } else {
-                                        launchMapIntent(
+                                        openCoordinatesInGoogleMaps(
                                             context,
                                             location.latitude,
                                             location.longitude

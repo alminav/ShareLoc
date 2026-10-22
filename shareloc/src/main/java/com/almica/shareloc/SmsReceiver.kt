@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
 import android.provider.Telephony
+import android.telephony.PhoneNumberUtils
 import android.telephony.SmsManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
@@ -19,143 +20,90 @@ import androidx.core.net.toUri
 import timber.log.Timber
 
 class SmsReceiver : BroadcastReceiver() {
-    interface SmsListener {
-        fun onSmsReceived(sender: String?, messageBody: String)
+
+    fun interface SmsListener {
+        fun onSmsReceived(sender: String, messageBody: String)
     }
 
     private var listener: SmsListener? = null
 
-    fun setSmsListener(listener: SmsListener) {
+    fun setSmsListener(listener: SmsListener?) {
         Timber.i("SmsReceiver setSmsListener")
         this.listener = listener
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            Telephony.Sms.Intents.SMS_RECEIVED_ACTION -> {
-                Timber.i("SMS empfangen")
-
-                val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-                val sender = messages?.firstOrNull()?.displayOriginatingAddress.orEmpty()
-                val body = messages?.joinToString(separator = "") { it.displayMessageBody.orEmpty() }.orEmpty()
-                Timber.i("SMS von $sender: $body")
-                for (sms in messages) {
-                    val sender = sms.originatingAddress
-                    val messageBody = sms.messageBody
-                    Timber.i("SmsReceiver Sender: $sender, Body: $messageBody")
-                    // Handle your message content here
-                    // Daten an das Interface in der MainActivity übergeben
-                    val relevantKeywords = listOf("turn on", "turn off", "status", "alert", "mobile", "warnung", "check")
-                    val containsKeyword = relevantKeywords.any { keyword ->
-                        body.contains(keyword, ignoreCase = true)
-                    }
-                    if (containsKeyword) {
-                        Timber.i("SMS von $sender mit relevanten Schlüsselwörtern empfangen")
-                        listener?.onSmsReceived(sender, messageBody)
-                            ?: Timber.w("SmsListener ist null")
-                    }
-                }
-                if (shouldShowNotification(context, sender, body)) {
-                    showSmsNotification(context, sender, body)
-                } else {
-                    Timber.i("SMS von $sender gefiltert - keine Benachrichtigung gesendet.")
-                }
+        Timber.i("SmsReceiver onReceive ${intent.action}")
+        try {
+            when (intent.action) {
+                Telephony.Sms.Intents.SMS_RECEIVED_ACTION -> handleSmsReceived(context, intent)
+                ACTION_REPLY_SMS -> handleReplySms(context, intent)
             }
-            ACTION_REPLY_SMS -> {
-                Timber.i("SMS Antwort-Aktion empfangen")
+        } catch (e: Exception) {
+            Timber.e(e, "Error processing broadcast in SmsReceiver")
+        }
+    }
 
-                val results = RemoteInput.getResultsFromIntent(intent)
-                val replyText = results?.getCharSequence(KEY_TEXT_REPLY)?.toString()
-                val recipientPhone = intent.getStringExtra(EXTRA_SENDER)
+    private fun handleSmsReceived(context: Context, intent: Intent) {
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        if (messages.isNullOrEmpty()) {
+            Timber.w("SMS Intent received, but no messages extracted.")
+            return
+        }
 
-                if (!replyText.isNullOrEmpty() && !recipientPhone.isNullOrEmpty()) {
-                    sendReplySms(context, recipientPhone, replyText)
-                }
-            }
+        val sender = messages.firstOrNull()?.displayOriginatingAddress.orEmpty()
+        val body = messages.joinToString(separator = "") { it.displayMessageBody.orEmpty() }
+        Timber.i("SMS from $sender: $body")
+
+        if (body.containsRelevantKeyword()) {
+            Timber.i("SMS from $sender contains relevant keywords.")
+            listener?.onSmsReceived(sender, body) ?: Timber.w("SmsListener is null")
+        }
+
+        if (shouldShowNotification(context, sender, body)) {
+            showSmsNotification(context, sender, body)
+        } else {
+            Timber.i("SMS from $sender filtered - no notification sent.")
+        }
+    }
+
+    private fun handleReplySms(context: Context, intent: Intent) {
+        val results = RemoteInput.getResultsFromIntent(intent)
+        val replyText = results?.getCharSequence(KEY_TEXT_REPLY)?.toString()
+        val recipientPhone = intent.getStringExtra(EXTRA_SENDER)
+
+        if (!replyText.isNullOrEmpty() && !recipientPhone.isNullOrEmpty()) {
+            sendReplySms(context, recipientPhone, replyText)
         }
     }
 
     private fun shouldShowNotification(context: Context, sender: String, body: String): Boolean {
-        if (body.isBlank()) {
-            Timber.d("SMS-Filter: Nachrichtentext ist leer.")
-            return false
-        }
+        if (body.isBlank()) return false
 
         val preferenceManager = PreferenceManager(context)
-
-        // Wenn SMS-Filter deaktiviert ist, alle nicht-leeren Nachrichten erlauben
-        if (!preferenceManager.isSmsFilterEnabled()) {
-            Timber.d("SMS-Filter ist deaktiviert - Benachrichtigung wird gesendet.")
-            return true
-        }
+        if (!preferenceManager.isSmsFilterEnabled()) return true
 
         val configuredNumber = preferenceManager.getPartnerPhoneNumber().trim()
+        val isConfiguredSender = configuredNumber.isNotEmpty() &&
+                PhoneNumberUtils.compare(context, sender, configuredNumber)
 
-        // Telefonnummern für Vergleich normalisieren
-        val normalizedSender = sender.replace(Regex("[^0-9+]"), "")
-        val normalizedConfigured = configuredNumber.replace(Regex("[^0-9+]"), "")
+        if (isConfiguredSender) return true
 
-        // Regel 1: Absender stimmt mit der in den Einstellungen konfigurierten Telefonnummer überein
-        val isConfiguredSender = normalizedConfigured.isNotEmpty() &&
-                (normalizedSender.endsWith(normalizedConfigured.takeLast(8)) ||
-                 normalizedConfigured.endsWith(normalizedSender.takeLast(8)))
-
-        if (isConfiguredSender) {
-            Timber.i("SMS-Filter Akzeptiert: Absender stimmt mit konfigurierter Nummer ($sender) überein.")
-            return true
-        }
-
-        // Regel 2: Inhalt enthält relevante Schlüsselwörter für ShareLoc
-        val relevantKeywords = listOf("turn on", "turn off", "status", "alert", "mobile", "warnung", "check")
-        val containsKeyword = relevantKeywords.any { keyword ->
-            body.contains(keyword, ignoreCase = true)
-        }
-
-        if (containsKeyword) {
-            Timber.i("SMS-Filter Akzeptiert: Inhalt enthält relevantes Schlüsselwort.")
-            return true
-        }
-
-        Timber.i("SMS-Filter Abgelehnt: Nachricht von $sender erfüllt keine Filterkriterien.")
-        return false
+        return body.containsRelevantKeyword()
     }
 
     private fun showSmsNotification(context: Context, sender: String, body: String) {
-        val channelId = CHANNEL_ID
         val notificationManager =
-            context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "SMS Benachrichtigungen",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Benachrichtigungen für empfangene SMS"
-            }
-            notificationManager.createNotificationChannel(channel)
-        }
+        createNotificationChannel(notificationManager)
 
-        val webHomeIntentUri = "http://almica.bplaced.net/showImages.php".toUri()
-        val webIntent = Intent(Intent.ACTION_VIEW, webHomeIntentUri).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-//        val activityIntent = Intent(context, MainActivity::class.java).apply {
-//            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-//        }
-
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            webIntent, //activityIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
+        val pendingIntent = createContentPendingIntent(context, body)
         val title = if (sender.isNotBlank()) "SMS von $sender" else "SMS empfangen"
         val text = body.ifBlank { "Neue SMS empfangen" }
         val largeIcon = getLargeIconBitmap(context)
 
-        val notificationBuilder = NotificationCompat.Builder(context, channelId)
+        val notificationBuilder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
             .setContentText(text)
@@ -165,55 +113,77 @@ class SmsReceiver : BroadcastReceiver() {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
-        if (largeIcon != null) {
-            notificationBuilder.setLargeIcon(largeIcon)
-        }
+        largeIcon?.let { notificationBuilder.setLargeIcon(it) }
 
-        // Add direct reply action if sender is known
         if (sender.isNotBlank()) {
-            val replyIntent = Intent(context, SmsReceiver::class.java).apply {
-                action = ACTION_REPLY_SMS
-                putExtra(EXTRA_SENDER, sender)
-            }
-
-            val replyPendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-            } else {
-                PendingIntent.FLAG_UPDATE_CURRENT
-            }
-
-            val replyPendingIntent = PendingIntent.getBroadcast(
-                context,
-                sender.hashCode(),
-                replyIntent,
-                replyPendingIntentFlags
-            )
-
-            val remoteInput = RemoteInput.Builder(KEY_TEXT_REPLY)
-                .setLabel("Antworten...")
-                .build()
-
-            val replyAction = NotificationCompat.Action.Builder(
-                android.R.drawable.ic_menu_send,
-                "Antworten",
-                replyPendingIntent
-            )
-                .addRemoteInput(remoteInput)
-                .setAllowGeneratedReplies(true)
-                .build()
-
-            notificationBuilder.addAction(replyAction)
+            addReplyAction(context, notificationBuilder, sender)
         }
 
-        val notification = notificationBuilder.build()
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-            context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationManager.notify(NOTIFICATION_ID, notification)
+        if (hasNotificationPermission(context)) {
+            val notificationId = if (sender.isNotBlank()) sender.hashCode() else NOTIFICATION_ID
+            notificationManager.notify(notificationId, notificationBuilder.build())
         } else {
             Timber.w("POST_NOTIFICATIONS permission not granted. Cannot show SMS notification.")
         }
+    }
+
+    private fun createContentPendingIntent(context: Context, body: String): PendingIntent {
+        val coordinates = extractCoordinates(body)
+        val intent = if (coordinates != null) { // ==> MainActivity onNewIntent
+            Intent(context, MainActivity::class.java).apply {
+                Timber.i("createContentPendingIntent MainActivity coordinates: $coordinates")
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(Constants.SMS_LATITUDE, coordinates.first)
+                putExtra(Constants.SMS_LONGITUDE, coordinates.second)
+            }
+        } else {
+            Timber.i("createContentPendingIntent BplacedActivity showImages.php")
+            Intent(Intent.ACTION_VIEW, "http://almica.bplaced.net/showImages.php".toUri()).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+        }
+
+        return PendingIntent.getActivity(
+            context,
+            coordinates.hashCode(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun addReplyAction(context: Context, builder: NotificationCompat.Builder, sender: String) {
+        val replyIntent = Intent(context, SmsReceiver::class.java).apply {
+            action = ACTION_REPLY_SMS
+            putExtra(EXTRA_SENDER, sender)
+        }
+
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+
+        val replyPendingIntent = PendingIntent.getBroadcast(
+            context,
+            sender.hashCode(),
+            replyIntent,
+            flags
+        )
+
+        val remoteInput = RemoteInput.Builder(KEY_TEXT_REPLY)
+            .setLabel("Antworten...")
+            .build()
+
+        val replyAction = NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_send,
+            "Antworten",
+            replyPendingIntent
+        )
+            .addRemoteInput(remoteInput)
+            .setAllowGeneratedReplies(true)
+            .build()
+
+        builder.addAction(replyAction)
     }
 
     private fun sendReplySms(context: Context, phone: String, message: String) {
@@ -221,21 +191,23 @@ class SmsReceiver : BroadcastReceiver() {
             context, android.Manifest.permission.SEND_SMS
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (hasSmsPermission) {
-            try {
-                val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    context.getSystemService(SmsManager::class.java)
-                } else {
-                    @Suppress("DEPRECATION")
-                    SmsManager.getDefault()
-                }
-                smsManager.sendTextMessage(phone, null, message, null, null)
-                Timber.i("Reply SMS sent to $phone: $message")
+        if (!hasSmsPermission) {
+            Timber.w("SEND_SMS permission not granted. Cannot send reply SMS.")
+            return
+        }
 
-                // Update notification to inform user reply was sent
-                val notificationManager =
-                    context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        try {
+            val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                context.getSystemService(SmsManager::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                SmsManager.getDefault()
+            }
+            smsManager?.sendTextMessage(phone, null, message, null, null)
+            Timber.i("Reply SMS sent to $phone: $message")
 
+            val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            if (notificationManager != null && hasNotificationPermission(context)) {
                 val updatedNotification = NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(R.mipmap.ic_launcher)
                     .setContentTitle("Antwort gesendet an $phone")
@@ -244,17 +216,29 @@ class SmsReceiver : BroadcastReceiver() {
                     .setAutoCancel(true)
                     .build()
 
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                    context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    notificationManager.notify(NOTIFICATION_ID, updatedNotification)
-                }
-            } catch (e: Exception) {
-                Timber.e(e, "Error sending reply SMS")
+                notificationManager.notify(phone.hashCode(), updatedNotification)
             }
-        } else {
-            Timber.w("SEND_SMS permission not granted. Cannot send reply SMS.")
+        } catch (e: Exception) {
+            Timber.e(e, "Error sending reply SMS")
         }
+    }
+
+    private fun createNotificationChannel(notificationManager: NotificationManager) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "SMS Benachrichtigungen",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Benachrichtigungen für empfangene SMS"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun hasNotificationPermission(context: Context): Boolean {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun getLargeIconBitmap(context: Context): Bitmap? {
@@ -266,7 +250,22 @@ class SmsReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun String.containsRelevantKeyword(): Boolean {
+        return RELEVANT_KEYWORDS.any { keyword -> this.contains(keyword, ignoreCase = true) }
+    }
+
+    private fun extractCoordinates(body: String): Pair<Double, Double>? {
+        val matches = COORDINATE_REGEX.findAll(body)
+            .mapNotNull { it.groupValues[1].toDoubleOrNull() }
+            .toList()
+
+        return if (matches.size >= 2) Pair(matches[0], matches[1]) else null
+    }
+
     companion object {
+        private val RELEVANT_KEYWORDS = listOf("turn on", "turn off", "status", "alert", "mobile", "position", "check")
+        private val COORDINATE_REGEX = Regex("""(-?\d+(?:\.\d+)?)\s*°""")
+
         const val ACTION_REPLY_SMS = "com.almica.shareloc.ACTION_REPLY_SMS"
         const val EXTRA_SENDER = "extra_sender"
         const val KEY_TEXT_REPLY = "key_text_reply"

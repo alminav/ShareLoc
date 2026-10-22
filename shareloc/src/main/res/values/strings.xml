@@ -65,6 +65,10 @@
     <string name="turn_on_location_sharing">Turn on</string>
     <string name="turn_off_location_sharing">Turn off</string>
     <string name="phone_list">📞 Partner phone list</string>
+    <string name="sms_location_error">unknown</string>
+    <string name="position">position</string>
+    <string name="i_am_here">I am here</string>
+    <string name="waiting_for_location">waiting for location</string>
     <string-array name="sms_messages">
         <item>👌 OK</item>
         <item>🚗 I\'m leaving now</item>
@@ -77,5 +81,7 @@
         <item>😊 Everything\'s fine</item>
         <item>🔛 Turn on</item>
         <item>🔚 Turn off</item>
+        <item>📍 Pick me up, my position is:</item>
+        <item>🛫 Start ShareLoc App</item>
     </string-array>
 </resources>
