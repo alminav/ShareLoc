@@ -13,7 +13,7 @@ try {
     ]);
 
     // Alle Standorte aus der Datenbank abfragen
-    $stmt = $pdo->query("SELECT id, title, image_url, latitude, longitude, altitude, temperature, created_at FROM locations ORDER BY id DESC");
+    $stmt = $pdo->query("SELECT id, title, image_url, latitude, longitude, altitude, temperature, battery_level, created_at, sos_flag FROM locations ORDER BY id DESC");
     $locations = $stmt->fetchAll();
 
     // Erfolgreiche Antwort senden

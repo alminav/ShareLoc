@@ -177,6 +177,8 @@
                         <th>Bild (Vorschau)</th>
                         <th>Zeitstempel</th>
 						<th>Temperatur</th>
+						<th>Level</th>
+						<th>SOS</th>
                     </tr>
                 </thead>
                 <tbody id="locationTableBody">
@@ -221,6 +223,8 @@
 							const date = loc.created_at;
 							const imageUrl = loc.image_url;
 							const temperature = parseFloat(loc.temperature).toFixed(1);
+							const level = parseFloat(loc.battery_level).toFixed(0);
+							const sos = parseFloat(loc.sos_flag).toFixed(0);
 
 							// 1. Bild-Zelle vorbereiten
 							let imageCell = '<span style="color: #bbb;">—</span>';
@@ -252,6 +256,8 @@
 								<td>${imageCell}</td>
 								<td style="color: #666;">${date}</td>
 								<td><strong>${temperature}°C</strong></td>
+								<td><strong>${level}%</strong></td>
+								<td><strong>${sos}</strong></td>
 						                                <!-- Der neue Löschen-Button -->
                                 <td>
                                     <button class="delete-btn" onclick="deleteLocation(${id}, '${title}')">🗑️ Löschen</button>

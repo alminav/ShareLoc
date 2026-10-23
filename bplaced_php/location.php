@@ -27,6 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $longitude = isset($_POST['longitude']) ? filter_var($_POST['longitude'], FILTER_VALIDATE_FLOAT) : false;
 	$altitude = isset($_POST['altitude']) ? filter_var($_POST['altitude'], FILTER_VALIDATE_FLOAT) : false;
 	$temperature = isset($_POST['temperature']) ? filter_var($_POST['temperature'], FILTER_VALIDATE_FLOAT) : false;
+	$battery_level = isset($_POST['battery_level']) ? filter_var($_POST['battery_level'], FILTER_VALIDATE_INT ) : false;
+	$sos_flag = isset($_POST['sos_flag']) ? filter_var($_POST['sos_flag'], FILTER_VALIDATE_INT ) : false;
 
     // Plausibilitätsprüfung (Lat: -90 bis 90, Lon: -180 bis 180)
     if ($latitude === false || $longitude === false || 
@@ -40,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // 3. Daten mit Prepared Statements einfügen
     try {
-        $sql = "INSERT INTO locations (title, image_url, latitude, longitude, altitude, temperature) VALUES (:title, :image_url, :latitude, :longitude, :altitude, :temperature)";
+        $sql = "INSERT INTO locations (title, image_url, latitude, longitude, altitude, temperature, battery_level, sos_flag) VALUES (:title, :image_url, :latitude, :longitude, :altitude, :temperature, :battery_level, :sos_flag)";
         $stmt = $pdo->prepare($sql);
         
         $stmt->execute([
@@ -50,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':longitude' => $longitude, 
 			':altitude' => $altitude,
 			':temperature' => $temperature,
+			':battery_level' => $battery_level,
+			':sos_flag' => $sos_flag,
         ]);
 
         echo json_encode(["status" => "success", "message" => "Koordinaten erfolgreich gespeichert."]);

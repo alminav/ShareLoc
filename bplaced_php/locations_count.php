@@ -19,13 +19,13 @@ try {
     // 2. SQL-Query dynamisch aufbauen
     if ($count !== false && $count > 0) {
         // Bei LIMIT mit Prepared Statements müssen wir den Wert explizit als Integer binden
-        $sql = "SELECT id, title, image_url, latitude, longitude, altitude, temperature, created_at FROM locations ORDER BY id DESC LIMIT :count";
+        $sql = "SELECT id, title, image_url, latitude, longitude, altitude, temperature, created_at, sos_flag FROM locations ORDER BY id DESC LIMIT :count";
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':count', $count, PDO::PARAM_INT);
         $stmt->execute();
     } else {
         // Ohne Limit alle Einträge laden
-        $sql = "SELECT id, title, image_url, latitude, longitude, altitide, temperature, created_at FROM locations ORDER BY id DESC";
+        $sql = "SELECT id, title, image_url, latitude, longitude, altitude, temperature, created_at, sos_flag FROM locations ORDER BY id DESC";
         $stmt = $pdo->query($sql);
     }
 
