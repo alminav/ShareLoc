@@ -69,11 +69,12 @@
     <string name="position">position</string>
     <string name="i_am_here">I am here</string>
     <string name="waiting_for_location">waiting for location</string>
+    <string name="on_tour">On Tour</string>
     <string-array name="sms_messages">
         <item>👌 OK</item>
         <item>🚗 I\'m leaving now</item>
-        <item>🆘 Please pick me up</item>
-        <item>🆘 Please pick me up, check your emails</item>
+        <item>🆘 SOS Please pick me up</item>
+        <item>🆘 SOS Please pick me up, check your emails</item>
         <item>📷 Took a photo</item>
         <item>🏠 I\'m heading home</item>
         <item>🏁 I\'ve arrived</item>

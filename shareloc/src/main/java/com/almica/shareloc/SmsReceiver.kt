@@ -269,7 +269,8 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     companion object {
-        private val RELEVANT_KEYWORDS = listOf("turn on", "turn off", "status", "foto", "photo", "position", "check")
+        private val RELEVANT_KEYWORDS = listOf("turn on", "turn off", "status", "foto", "photo", "position", "check",
+            "SOS")
         private val IMAGE_KEYWORDS = listOf("foto", "photo")
         private val COORDINATE_REGEX = Regex("""(-?\d+(?:\.\d+)?)\s*°""")
 

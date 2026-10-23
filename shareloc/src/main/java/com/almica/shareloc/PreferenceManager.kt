@@ -143,5 +143,13 @@ class PreferenceManager(context: Context) {
         Timber.i("Device name: $name")
         return name
     }
+
+    fun getSosFlag(): Int {
+        return prefs.getInt(Constants.KEY_SOS_FLAG, 0)
+    }
+
+    fun setSosFlag(flag: Int) {
+        prefs.edit { putInt(Constants.KEY_SOS_FLAG, flag) }
+    }
 }
 

@@ -8,7 +8,8 @@ data class LocationItem(
     val longitude: Double,
     val altitude: Double,
     val temperature: Double?,
-    val created_at: String
+    val created_at: String,
+    val sos_flag: Int
 )
 
 // Repräsentiert die gesamte JSON-Antwort von get_locations.php

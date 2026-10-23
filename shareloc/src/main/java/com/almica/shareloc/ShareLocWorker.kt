@@ -161,7 +161,8 @@ class ShareLocWorker(
             val deviceName = prefs.getDeviceName()
             Timber.i("deviceName: $deviceName")
 
-            val isLocationSent = sendLocation(deviceName, imageUrl, lat, lon, altitude = alt, temperature = temp, level = level)
+            val isLocationSent = sendLocation(deviceName, imageUrl, lat, lon,
+                altitude = alt, temperature = temp, level = level, sos_flag = prefs.getSosFlag())
             if (isLocationSent) {
                 prefs.incrementSendLocationCount()
                 Timber.i("sendLocation completed successfully")

@@ -72,8 +72,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.result.IntentSenderRequest
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Language
 import java.text.SimpleDateFormat
@@ -297,7 +295,7 @@ class MainActivity : ComponentActivity() {
             } else if (messageBody.contains(getString(R.string.turn_on_location_sharing), ignoreCase = true)) {
                 Timber.i("MainActivity viewModel.startWorker()")
                 if (!viewModel.isWorkerRunning.value)
-                    viewModel.startWorker()
+                    viewModel.startSharelocWorker()
                 else
                     Timber.i("MainActivity Worker already running")
             } else if (messageBody.contains(getString(R.string.turn_off_location_sharing), ignoreCase = true)) {
@@ -523,7 +521,7 @@ fun MainScreen(viewModel: MainViewModel) {
 //                    context.startActivity(intent)
                 },
                 onStartWorker = {
-                    viewModel.startWorker()
+                    viewModel.startSharelocWorker()
                 },
                 onStopWorker = { viewModel.stopWorker() },
                 onSendLocationNow = {
@@ -1029,7 +1027,9 @@ fun SendSmsDialog(
                                 DropdownMenuItem(
                                     text = { Text(selectionOption) },
                                     onClick = {
-                                        if (selectionOption.contains("position", ignoreCase = true)) {
+                                        if (selectionOption.contains("position", ignoreCase = true) ||
+                                            selectionOption.contains("🆘", ignoreCase = true) ||
+                                            selectionOption.contains("📷", ignoreCase = true)) {
                                             currentLocation?.let {
                                                 message =
                                                     selectionOption + " ${it.latitude.format(4)}° ${
@@ -1105,16 +1105,18 @@ fun LocationListDialog(
     val scope = rememberCoroutineScope()
     //val picDeviceName = deviceName.replace(" ", "_")
     var searchQuery by remember { mutableStateOf("") }
+    var sosFlag by remember { mutableIntStateOf(0) }
     var onlyPhotos by remember { mutableStateOf(onlyPhotos) }
     var selectedImageLocation by remember { mutableStateOf<LocationItem?>(null) }
     var loadedImageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     var isImageLoading by remember { mutableStateOf(false) }
 
-    val filteredLocations = remember(locations, searchQuery, onlyPhotos) {
+    val filteredLocations = remember(locations, searchQuery, onlyPhotos, sosFlag) {
         locations.filter { location ->
+            val matchesSos = sosFlag == 0 || location.sos_flag == sosFlag
             val matchesPhoto = !onlyPhotos || !location.image_url.isNullOrBlank()
             val matchesQuery = searchQuery.isBlank() || location.title?.contains(searchQuery, ignoreCase = true) == true
-            matchesPhoto && matchesQuery
+            matchesPhoto && matchesQuery && matchesSos
         }
     }
 
@@ -1258,6 +1260,14 @@ fun LocationListDialog(
                             tint = if (searchQuery.isBlank()) MaterialTheme.colorScheme.primary else
                                 MaterialTheme.colorScheme.error)
                     }
+                    Text(text = "🆘")
+                    Switch(
+                        checked = (sosFlag == 1),
+                        onCheckedChange = { isChecked ->
+                            sosFlag = if (isChecked) 1 else 0
+                            Timber.i("SOS Flag: $sosFlag")
+                        }
+                    )
                 }
 
                 Column(
@@ -1333,14 +1343,21 @@ fun LocationListDialog(
 }
 
 @Composable
-fun ContactControlCard(partnerPhoneNumber: String,
+fun ContactControlCard(
     modifier: Modifier = Modifier,
+    partnerPhoneNumber: String,
+    isWorkerRunning: Boolean = false,
+    onStartWorker: () -> Unit,
+    onStopWorker: () -> Unit,
     containerColor: Color = CardDefaults.cardColors().containerColor,
     contentColor: Color = CardDefaults.cardColors().contentColor,
     onSendSmsNow: () -> Unit,
-    onTakePicture: () -> Unit
+    onTakePicture: () -> Unit,
+    viewModel: MainViewModel = viewModel(),
+    onSendLocationNow: () -> Unit
 ) {
     val context = LocalContext.current
+    val sosFlag by viewModel.sosFlag.collectAsStateWithLifecycle()
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -1401,6 +1418,31 @@ fun ContactControlCard(partnerPhoneNumber: String,
                     Icon(imageVector = Icons.Default.Phone, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(modifier = Modifier.weight(1f), text = stringResource(R.string.telephone_call, partnerPhoneNumber))
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = stringResource(R.string.on_tour))
+                Spacer(modifier = Modifier.width(3.dp))
+                Switch(checked = isWorkerRunning, onCheckedChange = {
+                    viewModel.setSosFlag(0)
+                    if (isWorkerRunning)
+                        onStopWorker()
+                    else
+                        onStartWorker()
+                })
+                if (isWorkerRunning) {
+                    VerticalDivider(modifier = Modifier.fillMaxWidth(0.2f))
+                    Text(text = "🆘")
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Switch(
+                        checked = (sosFlag == 1),
+                        onCheckedChange = { isChecked ->
+                            viewModel.setSosFlag(if (isChecked) 1 else 0)
+                            if (isChecked)
+                                onSendLocationNow()
+                        }
+                    )
                 }
             }
         }
@@ -1766,9 +1808,14 @@ fun MainScreenContent(
         ) { page ->
             when (page) {
                 0 -> {
-                    ContactControlCard(partnerPhoneNumber = partnerPhoneNumber,
+                    ContactControlCard(
+                        partnerPhoneNumber = partnerPhoneNumber,
+                        isWorkerRunning = isWorkerRunning,
+                        onStartWorker = onStartWorker,
+                        onStopWorker = onStopWorker,
                         onSendSmsNow = onSendSmsNow,
-                        onTakePicture = onTakePicture
+                        onSendLocationNow = onSendLocationNow,
+                        onTakePicture = onTakePicture,
                     )
                 }
                 1 -> {

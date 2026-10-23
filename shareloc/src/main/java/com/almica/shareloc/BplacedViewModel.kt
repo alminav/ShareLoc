@@ -68,7 +68,8 @@ class BplacedViewModel : ViewModel() {
                     longitude,
                     altitude,
                     null,
-                    level = null
+                    level = null,
+                    sos_flag = 0
                 )
                 val body = response.body()
 

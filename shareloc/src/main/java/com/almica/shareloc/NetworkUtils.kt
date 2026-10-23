@@ -40,6 +40,7 @@ object Constants {
     const val KEY_BG_CAMERA_INTERVAL_MINS = "bg_camera_interval_minutes"
     const val KEY_BG_CAMERA_SOUND_ENABLED = "bg_camera_sound_enabled"
     const val KEY_TELEPHONE_NUMBER = "telephone_number"
+    const val KEY_SOS_FLAG = "sos_flag"
     const val SMS_LATITUDE = "sms_latitude"
     const val SMS_LONGITUDE = "sms_longitude"
 }
@@ -180,10 +181,11 @@ suspend fun sendLocation(
     longitude: Double,
     altitude: Double = 0.0,
     temperature: Float? = null,
-    level: Int? = null
+    level: Int? = null,
+    sos_flag: Int = 0,
 ): Boolean {
     return try {
-        Timber.i( "sendLocation $title $temperature°C")
+        Timber.i( "sendLocation $title $temperature°C sos: $sos_flag")
         val response = NetworkClient.bplacedApiService.saveLocation(
             title = title, //locationTitle,
             imageUrl = imageUrl,
@@ -191,7 +193,8 @@ suspend fun sendLocation(
             longitude = longitude,
             altitude = altitude,
             temperature = temperature,
-            level = level
+            level = level,
+            sos_flag = sos_flag
         )
         val body = response.body()
         if (response.isSuccessful && (body?.status == "success")) {

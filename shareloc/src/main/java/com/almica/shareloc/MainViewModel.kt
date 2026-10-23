@@ -56,6 +56,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = false
         )
 
+    private val _sosFlag = MutableStateFlow(prefs.getSosFlag())
+    val sosFlag: StateFlow<Int> = _sosFlag.asStateFlow()
+
+    fun getSosFlag(): Int {
+        return prefs.getSosFlag()
+    }
+
+    fun setSosFlag(flag: Int) {
+        prefs.setSosFlag(flag)
+        _sosFlag.value = flag
+    }
+
     private val _locationList = MutableStateFlow<List<LocationItem>>(emptyList())
     val locationList: StateFlow<List<LocationItem>> = _locationList.asStateFlow()
 
@@ -103,7 +115,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = prefs.getSendLocationCount()
         )
 
-    fun startWorker() {
+    /**
+     * ToDo:
+     * WatchDog Workmanager, starts every 15 minutes. looks for partner phone sos locations in bplaced database.
+     * startWatchdogWorker
+     */
+    fun startSharelocWorker() {
         val interval = prefs.getIntervalMinutes()
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -159,7 +176,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         // If worker is running and interval changed, restart it
         if (isWorkerRunning.value && oldInterval != interval) {
-            startWorker()
+            startSharelocWorker()
         }
 
         if (backgroundCameraEnabled) {
@@ -305,7 +322,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             _locationList.value = apiResponse.data
                             Timber.i("Anzahl geladener Orte: ${apiResponse.data.size}")
                             for (location in apiResponse.data) {
-                                Timber.i("Ort: ${location.title} (${location.latitude}, ${location.longitude}, ${location.altitude}, ${location.temperature})")
+                                Timber.i("Ort: ${location.title} (${location.latitude}, ${location.longitude}, ${location.altitude}, ${location.temperature}, sos: ${location.sos_flag})")
                             }
                         } else {
                             Timber.i("Fehler: ${apiResponse.message}")

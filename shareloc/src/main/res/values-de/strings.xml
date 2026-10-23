@@ -68,11 +68,12 @@
     <string name="position">position</string>
     <string name="i_am_here">Ich bin hier</string>
     <string name="waiting_for_location">Warte auf Standort</string>
+    <string name="on_tour">Auf Tour</string>
     <string-array name="sms_messages">
         <item>👌 OK</item>
         <item>🚗 Ich fahr jetzt los</item>
-        <item>🆘 Hol mich bitte ab</item>
-        <item>🆘 Hol mich bitte ab, schau in deine E-Mails</item>
+        <item>🆘 SOS Hol mich bitte ab</item>
+        <item>🆘 SOS Hol mich bitte ab, schau in deine E-Mails</item>
         <item>📷 Hab ein Foto gemacht</item>
         <item>🏠 Ich fahr nach Hause</item>
         <item>🏁 Bin angekommen</item>
