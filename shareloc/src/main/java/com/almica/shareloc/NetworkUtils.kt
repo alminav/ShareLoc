@@ -23,8 +23,11 @@ import java.util.Locale
 import timber.log.Timber
 
 object Constants {
-    const val WORK_TAG = "mobile_data_check_work"
-    const val NOTIFICATION_CHANNEL_ID = "mobile_data_channel"
+    const val SHARELOC_WORK_TAG = "shareloc_work"
+    const val SHARELOC_CHANNEL_ID = "shareloc_channel"
+    const val WATCHDOG_WORK_TAG = "watchdog_work"
+    const val WATCHDOG_CHANNEL_ID = "watchdog_channel"
+
     const val PREFS_NAME = "checker_prefs"
     const val KEY_PARTNER_PHONE_NUMBER = "partner_phone_number"
     const val KEY_PHONE_NUMBER = "phone_number"
@@ -148,7 +151,7 @@ fun getBatteryLevel(context: Context): Int {
 }
 
 fun sendShareLocNotification(context: Context) {
-    val channelId = Constants.NOTIFICATION_CHANNEL_ID
+    val channelId = Constants.SHARELOC_CHANNEL_ID
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

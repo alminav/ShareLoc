@@ -42,8 +42,6 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Start
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TabletAndroid
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +70,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.result.IntentSenderRequest
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Language
 import java.text.SimpleDateFormat
@@ -294,13 +293,13 @@ class MainActivity : ComponentActivity() {
 
             } else if (messageBody.contains(getString(R.string.turn_on_location_sharing), ignoreCase = true)) {
                 Timber.i("MainActivity viewModel.startWorker()")
-                if (!viewModel.isWorkerRunning.value)
+                if (!viewModel.isShareLocWorkerRunning.value)
                     viewModel.startSharelocWorker()
                 else
                     Timber.i("MainActivity Worker already running")
             } else if (messageBody.contains(getString(R.string.turn_off_location_sharing), ignoreCase = true)) {
                 Timber.i("MainActivity viewModel.stopWorker()")
-                viewModel.stopWorker()
+                viewModel.stopSharelocWorker()
             }
         } catch (e: Exception) {
             Timber.e(e, "Error processing SMS in onMessageMatched")
@@ -354,8 +353,11 @@ fun MainScreen(viewModel: MainViewModel) {
     val context = LocalContext.current
     val resources = LocalResources.current
     val isShareLocActive by viewModel.isShareLocActive.collectAsStateWithLifecycle(initialValue = false)
-    val isWorkerRunning by viewModel.isWorkerRunning.collectAsStateWithLifecycle(initialValue = false)
-    val workerLastRunTime by viewModel.workerLastRunTime.collectAsStateWithLifecycle(initialValue = 0L)
+    val isShareLocWorkerRunning by viewModel.isShareLocWorkerRunning.collectAsStateWithLifecycle(initialValue = false)
+    val sharelocWorkerLastRunTime by viewModel.sharelocWorkerLastRunTime.collectAsStateWithLifecycle(initialValue = 0L)
+    val isWatchDogWorkerRunning by viewModel.isWatchDogWorkerRunning.collectAsStateWithLifecycle(initialValue = false)
+    val watchdogWorkerLastRunTime by viewModel.watchdogWorkerLastRunTime.collectAsStateWithLifecycle(initialValue = 0L)
+
     val sendLocationCount by viewModel.sendLocationCount.collectAsStateWithLifecycle(initialValue = 0)
     val serviceRestartCount by viewModel.serviceRestartCount.collectAsStateWithLifecycle(initialValue = 0)
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle(initialValue = true)
@@ -449,7 +451,7 @@ fun MainScreen(viewModel: MainViewModel) {
     }
 
 
-    LaunchedEffect(isShareLocActive, isWorkerRunning, workerLastRunTime) {
+    LaunchedEffect(isShareLocActive, isShareLocWorkerRunning, sharelocWorkerLastRunTime) {
         lastStatusChangeTime = System.currentTimeMillis()
     }
 
@@ -505,8 +507,8 @@ fun MainScreen(viewModel: MainViewModel) {
                 viewModel.getDeviceName(),
                 viewModel.getPartnerPhoneNumber(),
                 isShareLocActive = isShareLocActive,
-                isWorkerRunning = isWorkerRunning,
-                workerInterval = viewModel.getIntervalMinutes(),
+                isShareLocWorkerRunning = isShareLocWorkerRunning,
+                isWatchDogWorkerRunning = isWatchDogWorkerRunning,
                 sendLocationCount = sendLocationCount,
                 serviceRestartCount = serviceRestartCount,
                 notificationsEnabled = notificationsEnabled,
@@ -520,10 +522,14 @@ fun MainScreen(viewModel: MainViewModel) {
 //                    val intent = Intent(context, BplacedActivity::class.java)
 //                    context.startActivity(intent)
                 },
-                onStartWorker = {
+                onStartShareLocWorker = {
                     viewModel.startSharelocWorker()
                 },
-                onStopWorker = { viewModel.stopWorker() },
+                onStopShareLocWorker = { viewModel.stopSharelocWorker() },
+                onStartWatchDogWorker = {
+                    viewModel.startWatchdogWorker()
+                },
+                onStopWatchDogWorker = { viewModel.stopWatchdogWorker() },
                 onSendLocationNow = {
                     viewModel.testWorkerImmediately()
                     lastStatusChangeTime = System.currentTimeMillis()
@@ -582,7 +588,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 Timber.i("GeoCamera dismissed photo link: $link")
                 val prefs = PreferenceManager(context)
                 link?.let {
-                    if (isWorkerRunning) {
+                    if (isShareLocWorkerRunning) {
                         prefs.setImageUrl(it)
                         viewModel.testWorkerImmediately()
                         lastStatusChangeTime = System.currentTimeMillis()
@@ -1343,314 +1349,265 @@ fun LocationListDialog(
 }
 
 @Composable
-fun ContactControlCard(
+fun MonitorControlCard(
     modifier: Modifier = Modifier,
     partnerPhoneNumber: String,
-    isWorkerRunning: Boolean = false,
-    onStartWorker: () -> Unit,
-    onStopWorker: () -> Unit,
+    isShareLocWorkerRunning: Boolean = false,
+    isWatchDogWorkerRunning: Boolean = false,
+    onStartShareLocWorker: () -> Unit,
+    onStopShareLocWorker: () -> Unit,
+    onStartWatchDogWorker: () -> Unit,
+    onStopWatchDogWorker: () -> Unit,
     containerColor: Color = CardDefaults.cardColors().containerColor,
     contentColor: Color = CardDefaults.cardColors().contentColor,
     onSendSmsNow: () -> Unit,
     onTakePicture: () -> Unit,
     viewModel: MainViewModel = viewModel(),
-    onSendLocationNow: () -> Unit
+    onSendLocationNow: () -> Unit,
+    sendLocationCount: Int,
+    serviceRestartCount: Int,
+    onFetchLocations: (Int?) -> Unit,
+    isWorkerRunning: Boolean,
+    onDeleteOldRecords: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val sosFlag by viewModel.sosFlag.collectAsStateWithLifecycle()
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Send SMS now
-            OutlinedButton(
-                onClick = onSendSmsNow,
-                enabled = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.send_sms_now))
-                }
-            }
-            // Take Picture
-            OutlinedButton(
-                onClick = onTakePicture,
-                //enabled = isWorkerRunning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.PhotoCamera, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.take_picture))
-                }
-            }
-            OutlinedButton(onClick = {
-                // Bypasses permission requirements by letting the user hit "Send" themselves
-                val dialIntent = Intent(Intent.ACTION_DIAL).apply {
-                    data = "tel:${partnerPhoneNumber}".toUri()
-                }
-                try {
-                    context.startActivity(dialIntent)
-                } catch (e: ActivityNotFoundException) {
-                    Toast.makeText(context, "No phone application found", Toast.LENGTH_SHORT).show()
-                }
-            }, modifier = Modifier
-                .fillMaxWidth()
-                .height(50.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Default.Phone, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.telephone_call, partnerPhoneNumber))
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = stringResource(R.string.on_tour))
-                Spacer(modifier = Modifier.width(3.dp))
-                Switch(checked = isWorkerRunning, onCheckedChange = {
-                    viewModel.setSosFlag(0)
-                    if (isWorkerRunning)
-                        onStopWorker()
-                    else
-                        onStartWorker()
-                })
-                if (isWorkerRunning) {
-                    VerticalDivider(modifier = Modifier.fillMaxWidth(0.2f))
-                    Text(text = "🆘")
-                    Spacer(modifier = Modifier.width(3.dp))
-                    Switch(
-                        checked = (sosFlag == 1),
-                        onCheckedChange = { isChecked ->
-                            viewModel.setSosFlag(if (isChecked) 1 else 0)
-                            if (isChecked)
-                                onSendLocationNow()
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-@Composable
-fun WorkerControlCard(
-    isWorkerRunning: Boolean,
-    workerInterval: Long,
-    sendLocationCount: Int,
-    onStartWorker: () -> Unit,
-    onStopWorker: () -> Unit,
-    onFetchLocations: (Int?) -> Unit,
-    modifier: Modifier = Modifier,
-    containerColor: Color = CardDefaults.cardColors().containerColor,
-    contentColor: Color = CardDefaults.cardColors().contentColor,
-    onSendLocationNow: () -> Unit,
-    onDeleteOldRecords: (Int) -> Unit,
-    serviceRestartCount: Int
-) {
     var selectedLimit by remember { mutableStateOf<Int?>(5) }
     var dropdownExpanded by remember { mutableStateOf(false) }
     val limitOptions = listOf(null, 3, 5, 10, 20, 50)
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(
-            containerColor = containerColor,
-            contentColor = contentColor
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    Column(modifier = modifier.fillMaxWidth()) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            colors = CardDefaults.cardColors(
+                containerColor = containerColor,
+                contentColor = contentColor
+            )
         ) {
-            Row {
-                Text(
-                    text = stringResource(R.string.locations_sent_count, sendLocationCount),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.width(20.dp))
-                Text(
-                    text = stringResource(R.string.service_restart_count, serviceRestartCount),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            // Start Job Button
-            OutlinedButton(
-                onClick = onStartWorker,
-                enabled = !isWorkerRunning,
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Start, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f),
-                        text = if (isWorkerRunning) {
-                            stringResource(R.string.worker_running, workerInterval)
-                        } else {
-                            stringResource(R.string.worker_start, workerInterval)
-                        }
-                    )
-                }
-            }
-
-// Stop Job Button
-            OutlinedButton(
-                onClick = onStopWorker,
-                enabled = isWorkerRunning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Stop,
-                        contentDescription = null,
-                        tint = if (isWorkerRunning) {
-                            MaterialTheme.colorScheme.error
-                        } else {
-                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                        }
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f),
-                        text = stringResource(R.string.worker_stop))
-                }
-            }
-
-            // Fetch Locations Button with Dropdown
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                // Send SMS now
                 OutlinedButton(
-                    onClick = { onFetchLocations(selectedLimit) },
+                    onClick = onSendSmsNow,
+                    enabled = true,
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .height(50.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(modifier = Modifier.weight(1f), text = stringResource(R.string.get_locations))
+                        Text(modifier = Modifier.weight(1f), text = stringResource(R.string.send_sms_now))
                     }
                 }
-
-                Box {
-                    OutlinedButton(
-                        onClick = { dropdownExpanded = true },
-                        modifier = Modifier.height(50.dp)
-                    ) {
-                        Text(
-                            text = selectedLimit?.toString() ?: stringResource(R.string.fetch_limit_all)
+                // Take Picture
+                OutlinedButton(
+                    onClick = onTakePicture,
+                    //enabled = isWorkerRunning,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.PhotoCamera, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(modifier = Modifier.weight(1f), text = stringResource(R.string.take_picture))
+                    }
+                }
+                OutlinedButton(onClick = {
+                    // Bypasses permission requirements by letting the user hit "Send" themselves
+                    val dialIntent = Intent(Intent.ACTION_DIAL).apply {
+                        data = "tel:${partnerPhoneNumber}".toUri()
+                    }
+                    try {
+                        context.startActivity(dialIntent)
+                    } catch (e: ActivityNotFoundException) {
+                        Toast.makeText(context, "No phone application found", Toast.LENGTH_SHORT).show()
+                    }
+                }, modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.Phone, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(modifier = Modifier.weight(1f), text = stringResource(R.string.telephone_call, partnerPhoneNumber))
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = stringResource(R.string.on_tour))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Switch(checked = isShareLocWorkerRunning, onCheckedChange = {
+                        viewModel.setSosFlag(0)
+                        if (isShareLocWorkerRunning)
+                            onStopShareLocWorker()
+                        else
+                            onStartShareLocWorker()
+                    })
+                    if (isShareLocWorkerRunning) {
+                        VerticalDivider(modifier = Modifier.fillMaxWidth(0.2f))
+                        Text(text = "🆘")
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Switch(
+                            checked = (sosFlag == 1),
+                            onCheckedChange = { isChecked ->
+                                viewModel.setSosFlag(if (isChecked) 1 else 0)
+                                if (isChecked)
+                                    onSendLocationNow()
+                            }
                         )
                     }
-                    DropdownMenu(
-                        expanded = dropdownExpanded,
-                        onDismissRequest = { dropdownExpanded = false }
-                    ) {
-                        limitOptions.forEach { limit ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = limit?.toString() ?: stringResource(R.string.fetch_limit_all)
-                                    )
-                                },
-                                onClick = {
-                                    selectedLimit = limit
-                                    dropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
                 }
-            }
-
-            // Send Location now
-            OutlinedButton(
-                onClick = onSendLocationNow,
-                enabled = isWorkerRunning,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.LocationOn, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(modifier = Modifier.weight(1f), text = stringResource(R.string.send_location_now))
+                    Text(text = stringResource(R.string.watchdog))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Switch(checked = isWatchDogWorkerRunning, onCheckedChange = {
+                        viewModel.setSosFlag(0)
+                        if (isWatchDogWorkerRunning)
+                            onStopWatchDogWorker()
+                        else
+                            onStartWatchDogWorker()
+                    })
                 }
-            }
-
-            var deleteDaysExpanded by remember { mutableStateOf(false) }
-            var selectedDays by remember { mutableStateOf(3) }
-            val deleteDaysOptions = listOf(0, 1, 2, 3, 4, 5, 7, 14, 30)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = { onDeleteOldRecords(selectedDays) },
-                    modifier = Modifier
-                        .height(50.dp)
-                        .weight(1f)
+                // Fetch Locations Button with Dropdown
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = stringResource(R.string.cleanup_old_records),
-                        modifier = Modifier.weight(1f))
-                }
-                Box() {
                     OutlinedButton(
-                        onClick = { deleteDaysExpanded = true },
+                        onClick = { onFetchLocations(selectedLimit) },
                         modifier = Modifier
+                            .weight(1f)
                             .height(50.dp)
                     ) {
-                        Text(text = if (selectedDays == 0) "> 0 (All)" else "> $selectedDays days")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(modifier = Modifier.weight(1f), text = stringResource(R.string.get_locations))
+                        }
                     }
-                    DropdownMenu(
-                        expanded = deleteDaysExpanded,
-                        onDismissRequest = { deleteDaysExpanded = false }
-                    ) {
-                        deleteDaysOptions.forEach { days ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(text = if (days == 0) "> 0 (All)" else "> $days days")
-                                },
-                                onClick = {
-                                    selectedDays = days
-                                    deleteDaysExpanded = false
-                                }
+
+                    Box {
+                        OutlinedButton(
+                            onClick = { dropdownExpanded = true },
+                            modifier = Modifier.height(50.dp)
+                        ) {
+                            Text(
+                                text = selectedLimit?.toString() ?: stringResource(R.string.fetch_limit_all)
                             )
+                        }
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            limitOptions.forEach { limit ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = limit?.toString() ?: stringResource(R.string.fetch_limit_all)
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedLimit = limit
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-            }
 
+                var deleteDaysExpanded by remember { mutableStateOf(false) }
+                var selectedDays by remember { mutableStateOf(3) }
+                val deleteDaysOptions = listOf(0, 1, 2, 3, 4, 5, 7, 14, 30)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = { onDeleteOldRecords(selectedDays) },
+                        modifier = Modifier
+                            .height(50.dp)
+                            .weight(1f)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = stringResource(R.string.cleanup_old_records),
+                            modifier = Modifier.weight(1f))
+                    }
+                    Box() {
+                        OutlinedButton(
+                            onClick = { deleteDaysExpanded = true },
+                            modifier = Modifier
+                                .height(50.dp)
+                        ) {
+                            Text(text = if (selectedDays == 0) "> 0 (All)" else "> $selectedDays days")
+                        }
+                        DropdownMenu(
+                            expanded = deleteDaysExpanded,
+                            onDismissRequest = { deleteDaysExpanded = false }
+                        ) {
+                            deleteDaysOptions.forEach { days ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(text = if (days == 0) "> 0 (All)" else "> $days days")
+                                    },
+                                    onClick = {
+                                        selectedDays = days
+                                        deleteDaysExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                // Send Location now
+                OutlinedButton(
+                    onClick = onSendLocationNow,
+                    enabled = isWorkerRunning,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(modifier = Modifier.weight(1f), text = stringResource(R.string.send_location_now))
+                    }
+                }
+            }
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(modifier = Modifier.fillMaxWidth(0.8f), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    text = stringResource(R.string.locations_sent_count, sendLocationCount),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.service_restart_count, serviceRestartCount),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.build_time,  BuildConfig.BUILD_TIME),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 }
@@ -1734,15 +1691,17 @@ fun MainScreenContent(
     deviceName: String,
     partnerPhoneNumber: String,
     isShareLocActive: Boolean,
-    isWorkerRunning: Boolean,
-    workerInterval: Long,
+    isShareLocWorkerRunning: Boolean,
+    isWatchDogWorkerRunning: Boolean,
     sendLocationCount: Int,
     notificationsEnabled: Boolean,
     lastStatusChangeTime: Long,
     onNotificationsChanged: (Boolean) -> Unit,
     onCheckStatus: () -> Unit,
-    onStartWorker: () -> Unit,
-    onStopWorker: () -> Unit,
+    onStartShareLocWorker: () -> Unit,
+    onStopShareLocWorker: () -> Unit,
+    onStartWatchDogWorker: () -> Unit,
+    onStopWatchDogWorker: () -> Unit,
     onSendLocationNow: () -> Unit,
     onFetchLocations: (Int?) -> Unit,
     onSendSmsNow: () -> Unit,
@@ -1759,9 +1718,8 @@ fun MainScreenContent(
     
     val contentColor = if (isShareLocActive) MaterialTheme.colorScheme.onErrorContainer
                        else MaterialTheme.colorScheme.onPrimaryContainer
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val scope = rememberCoroutineScope()
-    val buildTime = BuildConfig.BUILD_TIME
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1771,14 +1729,8 @@ fun MainScreenContent(
         verticalArrangement = Arrangement.Top,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-/*        Text(
-            text = "Locations Monitor",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground
-        )*/
         Text(
-            text = stringResource(R.string.device_label, deviceName, buildTime),
+            text = stringResource(R.string.device_label, deviceName),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onBackground
@@ -1788,11 +1740,6 @@ fun MainScreenContent(
             Tab(
                 selected = pagerState.currentPage == 0,
                 onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                text = { Text(stringResource(R.string.contact)) }
-            )
-            Tab(
-                selected = pagerState.currentPage == 1,
-                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
                 text = { Text(stringResource(R.string.actions)) }
             )
             Tab(
@@ -1808,31 +1755,26 @@ fun MainScreenContent(
         ) { page ->
             when (page) {
                 0 -> {
-                    ContactControlCard(
+                    MonitorControlCard(
                         partnerPhoneNumber = partnerPhoneNumber,
-                        isWorkerRunning = isWorkerRunning,
-                        onStartWorker = onStartWorker,
-                        onStopWorker = onStopWorker,
+                        isShareLocWorkerRunning = isShareLocWorkerRunning,
+                        isWatchDogWorkerRunning = isWatchDogWorkerRunning,
+                        onStartShareLocWorker = onStartShareLocWorker,
+                        onStopShareLocWorker = onStopShareLocWorker,
+                        onStartWatchDogWorker = onStartWatchDogWorker,
+                        onStopWatchDogWorker = onStopWatchDogWorker,
                         onSendSmsNow = onSendSmsNow,
                         onSendLocationNow = onSendLocationNow,
                         onTakePicture = onTakePicture,
+                        sendLocationCount = sendLocationCount,
+                        serviceRestartCount = serviceRestartCount,
+                        onFetchLocations = onFetchLocations,
+                        isWorkerRunning = isShareLocWorkerRunning,
+                        onDeleteOldRecords = { days ->
+                            onDeleteOldRecords(days) }
                     )
                 }
                 1 -> {
-                    WorkerControlCard(
-                        isWorkerRunning = isWorkerRunning,
-                        workerInterval = workerInterval,
-                        sendLocationCount = sendLocationCount,
-                        serviceRestartCount = serviceRestartCount,
-                        onStartWorker = onStartWorker,
-                        onStopWorker = onStopWorker,
-                        onFetchLocations = onFetchLocations,
-                        onSendLocationNow = onSendLocationNow,
-                        onDeleteOldRecords = { days ->
-                        onDeleteOldRecords(days) }
-                    )
-                }
-                2 -> {
                     StatusCard(
                         isShareLocActive = isShareLocActive,
                         lastStatusChangeTime = lastStatusChangeTime,
@@ -1866,15 +1808,17 @@ fun MainScreenActivePreview() {
                 deviceName = "0123456789",
                 partnerPhoneNumber = "01111111",
                 isShareLocActive = true,
-                isWorkerRunning = false,
-                workerInterval = 15L,
+                isShareLocWorkerRunning = false,
+                isWatchDogWorkerRunning = false,
                 sendLocationCount = 3,
                 notificationsEnabled = true,
                 lastStatusChangeTime = System.currentTimeMillis(),
                 onNotificationsChanged = {},
                 onCheckStatus = {},
-                onStartWorker = {},
-                onStopWorker = {},
+                onStartShareLocWorker = {},
+                onStopShareLocWorker = {},
+                onStartWatchDogWorker = {},
+                onStopWatchDogWorker = {},
                 onSendLocationNow = {},
                 onFetchLocations = {},
                 onSendSmsNow = {},
@@ -1898,15 +1842,17 @@ fun MainScreenInactivePreview() {
                 deviceName = "0123456789",
                 partnerPhoneNumber = "01111111",
                 isShareLocActive = false,
-                isWorkerRunning = true,
-                workerInterval = 15L,
+                isShareLocWorkerRunning = true,
+                isWatchDogWorkerRunning = true,
                 sendLocationCount = 5,
                 notificationsEnabled = false,
                 lastStatusChangeTime = System.currentTimeMillis(),
                 onNotificationsChanged = {},
                 onCheckStatus = {},
-                onStartWorker = {},
-                onStopWorker = {},
+                onStartShareLocWorker = {},
+                onStopShareLocWorker = {},
+                onStartWatchDogWorker = {},
+                onStopWatchDogWorker = {},
                 onSendLocationNow = {},
                 onFetchLocations = {},
                 onSendSmsNow = {},

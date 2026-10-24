@@ -65,7 +65,7 @@ class ShareLocWorker(
 ) : CoroutineWorker(context, workerParams) {
 
     companion object {
-        private const val TAG = "CameraWorker"
+        private const val TAG = "ShareLocWorker"
         private const val NOTIFICATION_ID = 1001
         private const val NOTIFICATION_CHANNEL_ID = "shareloc_camera_worker"
         const val LUX_THRESHOLD = 30.0f

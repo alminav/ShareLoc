@@ -45,8 +45,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = PreferenceManager(application)
     val isShareLocActive: StateFlow<Boolean> = networkMonitor.isShareLocActive
     // Track work status more robustly by checking for any active work with the tag
-    val isWorkerRunning: StateFlow<Boolean> = workManager
-        .getWorkInfosByTagFlow(Constants.WORK_TAG)
+    val isShareLocWorkerRunning: StateFlow<Boolean> = workManager
+        .getWorkInfosByTagFlow(Constants.SHARELOC_WORK_TAG)
+        .map { list ->
+            list.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = false
+        )
+    val isWatchDogWorkerRunning: StateFlow<Boolean> = workManager
+        .getWorkInfosByTagFlow(Constants.WATCHDOG_WORK_TAG)
         .map { list ->
             list.any { it.state == WorkInfo.State.ENQUEUED || it.state == WorkInfo.State.RUNNING }
         }
@@ -82,8 +92,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _notificationsEnabled.value = enabled
     }
 
-    val workerLastRunTime: StateFlow<Long> = workManager
-        .getWorkInfosByTagFlow(Constants.WORK_TAG)
+    val watchdogWorkerLastRunTime: StateFlow<Long> = workManager
+        .getWorkInfosByTagFlow(Constants.WATCHDOG_WORK_TAG)
+        .map { list ->
+            if (list.isNotEmpty()) System.currentTimeMillis() else 0L
+        }
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0L
+        )
+
+    val sharelocWorkerLastRunTime: StateFlow<Long> = workManager
+        .getWorkInfosByTagFlow(Constants.SHARELOC_WORK_TAG)
         .map { list ->
             if (list.isNotEmpty()) System.currentTimeMillis() else 0L
         }
@@ -94,7 +115,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
 
     val sendLocationCount: StateFlow<Int> = workManager
-        .getWorkInfosByTagFlow(Constants.WORK_TAG)
+        .getWorkInfosByTagFlow(Constants.SHARELOC_WORK_TAG)
         .map {
             prefs.getSendLocationCount()
         }
@@ -105,7 +126,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
 
     val serviceRestartCount: StateFlow<Int> = workManager
-        .getWorkInfosByTagFlow(Constants.WORK_TAG)
+        .getWorkInfosByTagFlow(Constants.SHARELOC_WORK_TAG)
         .map {
             prefs.getServiceRestartCount()
         }
@@ -130,12 +151,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             interval, TimeUnit.MINUTES
         )
             .setConstraints(constraints)
-            .addTag(Constants.WORK_TAG)
+            .addTag(Constants.SHARELOC_WORK_TAG)
             .build()
 
         // Use unique periodic work to avoid multiple instances and ensure correct status tracking
         workManager.enqueueUniquePeriodicWork(
-            Constants.WORK_TAG,
+            Constants.SHARELOC_WORK_TAG,
             ExistingPeriodicWorkPolicy.UPDATE,
             workRequest
         )
@@ -147,11 +168,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun stopWorker() {
+    fun stopSharelocWorker() {
         // Cancel by tag ensures all instances (unique or tagged) are stopped
-        workManager.cancelAllWorkByTag(Constants.WORK_TAG)
+        workManager.cancelAllWorkByTag(Constants.SHARELOC_WORK_TAG)
         stopRepeatingCamera()
     }
+
+    fun startWatchdogWorker() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val workRequest = PeriodicWorkRequestBuilder<WatchDogWorker>(
+            15, TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .addTag(Constants.WATCHDOG_WORK_TAG)
+            .build()
+
+        // Use unique periodic work to avoid multiple instances and ensure correct status tracking
+        workManager.enqueueUniquePeriodicWork(
+            Constants.WATCHDOG_WORK_TAG,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            workRequest
+        )
+    }
+
+    fun stopWatchdogWorker() {
+        // Cancel by tag ensures all instances (unique or tagged) are stopped
+        workManager.cancelAllWorkByTag(Constants.WATCHDOG_WORK_TAG)
+    }
+
 
     fun updatePreferences(
         phoneNumber: String,
@@ -175,7 +222,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.setBackgroundCameraSoundEnabled(backgroundCameraSoundEnabled)
 
         // If worker is running and interval changed, restart it
-        if (isWorkerRunning.value && oldInterval != interval) {
+        if (isShareLocWorkerRunning.value && oldInterval != interval) {
             startSharelocWorker()
         }
 
@@ -203,7 +250,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         val testRequest = OneTimeWorkRequestBuilder<ShareLocWorker>()
             .setConstraints(constraints)
-            .addTag(Constants.WORK_TAG)
+            .addTag(Constants.SHARELOC_WORK_TAG)
             .addTag("test_worker")
             .build()
         workManager.enqueue(testRequest)

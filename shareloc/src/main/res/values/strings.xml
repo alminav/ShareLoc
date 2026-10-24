@@ -41,7 +41,7 @@
     <string name="uc_close" translatable="false">\u2716</string>
     <string name="cleanup">Clean up</string>
     <string name="cleanup_old_records">Clean up old records</string>
-    <string name="locations_sent_count">Locations sent: %1$d</string>
+    <string name="locations_sent_count">Locations: %1$d</string>
     <string name="send_location_now">Send location now</string>
     <string name="send_sms_now">Send SMS now</string>
     <string name="current_status_label">Last status check: %1$s</string>
@@ -50,7 +50,8 @@
     <string name="check_status_now">Check status now</string>
     <string name="enable_notifications_label">Enable notifications</string>
     <string name="fetch_limit_all">All</string>
-    <string name="device_label">📞 %1$s ⏲️ %2$s</string>
+    <string name="device_label">📞 %1$s</string>
+    <string name="build_time">⏲️ %1$s</string>
     <string name="open_in_map">🗺️ Google Maps</string>
     <string name="store_in_gallery">💾 Gallery</string>
     <string name="image_saved">Image saved</string>
@@ -61,7 +62,7 @@
     <string name="camera_loading">Loading camera …</string>
     <string name="contact">✋ Contact</string>
     <string name="telephone_call">Phone call (%1$s)</string>
-    <string name="service_restart_count">Service Restarts: %1$d</string>
+    <string name="service_restart_count">Srv Restarts: %1$d</string>
     <string name="turn_on_location_sharing">Turn on</string>
     <string name="turn_off_location_sharing">Turn off</string>
     <string name="phone_list">📞 Partner phone list</string>
@@ -69,7 +70,8 @@
     <string name="position">position</string>
     <string name="i_am_here">I am here</string>
     <string name="waiting_for_location">waiting for location</string>
-    <string name="on_tour">On Tour</string>
+    <string name="on_tour">🚴 On Tour</string>
+    <string name="watchdog">👀 Watchdog</string>
     <string-array name="sms_messages">
         <item>👌 OK</item>
         <item>🚗 I\'m leaving now</item>

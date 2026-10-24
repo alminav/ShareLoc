@@ -57,6 +57,13 @@
         </activity>
         <activity android:name=".BplacedActivity"/>
         <!-- Register the BroadcastReceiver -->
+        <receiver
+            android:name=".NotificationCancelReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="ACTION_CANCEL_NOTIFICATION" />
+            </intent-filter>
+        </receiver>
         <!--receiver
             android:name=".SmsReceiver"
             android:exported="true"
