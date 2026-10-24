@@ -135,9 +135,13 @@ class WatchDogWorker(
 }
 
 const val ACTION_CANCEL_NOTIFICATION = "com.almica.shareloc.ACTION_CANCEL_NOTIFICATION"
+const val ACTION_MAP_NOTIFICATION = "com.almica.shareloc.ACTION_MAP_NOTIFICATION"
 const val EXTRA_NOTIFICATION_ID = "NOTIFICATION_ID"
+const val EXTRA_NOTIFICATION_LATITUDE = "NOTIFICATION_LATITUDE"
+const val EXTRA_NOTIFICATION_LONGITUDE = "NOTIFICATION_LONGITUDE"
 
 fun sendWatchDogNotification(context: Context, currentPosition: LocationItem) {
+    Timber.i("sendWatchDogNotification ${currentPosition.latitude} ${currentPosition.longitude}")
     val channelId = Constants.WATCHDOG_CHANNEL_ID
     val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     val notificationId = 1003
@@ -159,6 +163,26 @@ fun sendWatchDogNotification(context: Context, currentPosition: LocationItem) {
         android.R.drawable.ic_menu_close_clear_cancel,
         "Cancel",
         pendingCancelIntent
+    ).build()
+
+    val mapIntent = Intent(context, NotificationCancelReceiver::class.java).apply {
+        action = ACTION_MAP_NOTIFICATION
+        putExtra(EXTRA_NOTIFICATION_ID, notificationId)
+        putExtra(EXTRA_NOTIFICATION_LATITUDE, currentPosition.latitude)
+        putExtra(EXTRA_NOTIFICATION_LONGITUDE, currentPosition.longitude)
+    }
+
+    val pendingMapIntent = PendingIntent.getBroadcast(
+        context,
+        notificationId,
+        mapIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val mapAction = NotificationCompat.Action.Builder(
+        android.R.drawable.ic_dialog_map,
+        "Map",
+        pendingMapIntent
     ).build()
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -198,18 +222,34 @@ fun sendWatchDogNotification(context: Context, currentPosition: LocationItem) {
     if (currentPosition.sos_flag == 1) {
         notificationBuilder.addAction(cancelAction)
     }
+    notificationBuilder.addAction(mapAction)
 
     notificationManager.notify(notificationId, notificationBuilder.build())
 }
 
 class NotificationCancelReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        Timber.i("NotificationCancelReceiver onReceive intent.action: ${intent.action}")
         if (intent.action == ACTION_CANCEL_NOTIFICATION) {
             val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
             Timber.i("NotificationCancelReceiver onReceive notificationId: $notificationId")
 
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(notificationId)
+        } else if (intent.action == ACTION_MAP_NOTIFICATION) {
+            val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, 0)
+            Timber.i("NotificationCancelReceiver onReceive notificationId: $notificationId")
+            val latitude = intent.getDoubleExtra(EXTRA_NOTIFICATION_LATITUDE, 0.0)
+            val longitude = intent.getDoubleExtra(EXTRA_NOTIFICATION_LONGITUDE, 0.0)
+            if (latitude != 0.0 && longitude != 0.0) {
+                openCoordinatesInGoogleMaps(
+                    context,
+                    latitude,
+                    longitude,
+                    context.getString(R.string.i_am_here),
+                    zoom = 10
+                )
+            }
         }
     }
 }

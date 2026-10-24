@@ -99,12 +99,14 @@ fun openCoordinatesInGoogleMaps(
     label: String? = null,
     zoom: Int? = null
 ) {
+    Timber.i("openCoordinatesInGoogleMaps: $latitude, $longitude")
     val encodedLabel = if (!label.isNullOrBlank()) "(${Uri.encode(label)})" else ""
     val zoomParam = if (zoom != null && zoom in 1..21) "&z=$zoom" else ""
     val gmmIntentUri = "geo:$latitude,$longitude?q=$latitude,$longitude$encodedLabel$zoomParam".toUri()
 
     val mapIntent = Intent(Intent.ACTION_VIEW, gmmIntentUri).apply {
         setPackage("com.google.android.apps.maps") // Zunächst bevorzugt Google Maps ansprechen
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 
     try {
@@ -122,7 +124,9 @@ fun openCoordinatesInGoogleMaps(
                 "https://www.google.com/maps/search/?api=1&query=$latitude,$longitude"
             }
             Timber.i("Opening web URL: $webUrl")
-            val webIntent = Intent(Intent.ACTION_VIEW, webUrl.toUri())
+            val webIntent = Intent(Intent.ACTION_VIEW, webUrl.toUri()).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             try {
                 context.startActivity(webIntent)
             } catch (_: ActivityNotFoundException) {
@@ -1367,7 +1371,6 @@ fun MonitorControlCard(
     sendLocationCount: Int,
     serviceRestartCount: Int,
     onFetchLocations: (Int?) -> Unit,
-    isWorkerRunning: Boolean,
     onDeleteOldRecords: (Int) -> Unit
 ) {
     val context = LocalContext.current
@@ -1408,7 +1411,6 @@ fun MonitorControlCard(
                 // Take Picture
                 OutlinedButton(
                     onClick = onTakePicture,
-                    //enabled = isWorkerRunning,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp)
@@ -1573,7 +1575,7 @@ fun MonitorControlCard(
                 // Send Location now
                 OutlinedButton(
                     onClick = onSendLocationNow,
-                    enabled = isWorkerRunning,
+                    enabled = isShareLocWorkerRunning,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp)
@@ -1769,7 +1771,6 @@ fun MainScreenContent(
                         sendLocationCount = sendLocationCount,
                         serviceRestartCount = serviceRestartCount,
                         onFetchLocations = onFetchLocations,
-                        isWorkerRunning = isShareLocWorkerRunning,
                         onDeleteOldRecords = { days ->
                             onDeleteOldRecords(days) }
                     )

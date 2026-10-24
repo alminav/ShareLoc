@@ -62,6 +62,7 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="ACTION_CANCEL_NOTIFICATION" />
+                <action android:name="ACTION_MAP_NOTIFICATION" />
             </intent-filter>
         </receiver>
         <!--receiver
